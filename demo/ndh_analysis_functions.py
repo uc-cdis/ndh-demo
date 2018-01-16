@@ -294,7 +294,7 @@ def compare_lab_results(variable, tag=None):
 def compare_survival(variable, tag=None):
     ''' Compare survival with haart vs not ehaart'''
     
-    studies = ['MACS', 'WIHS'] 
+    studies = ['MACS'] 
     filename = '%s_survival.json' % variable
     if os.path.isfile(filename):
         json_data=open(filename).read()
@@ -306,7 +306,6 @@ def compare_survival(variable, tag=None):
             count_query = """{ study(submitter_id:"%s"){ _cases_count }}""" % study
             counts = query_api(count_query)['data']['study'][0]['_cases_count']
             offset = 0
-            counts = 1000
             print counts
             chunk = 100
 
@@ -317,7 +316,7 @@ def compare_survival(variable, tag=None):
                 query_txt = """{ study(submitter_id:"%s"){
                                   cases(first:%d, offset:%d, order_by_asc: "submitter_id"){ 
                                      submitter_id 
-                                     hiv_history_records{%s} 
+                                     hiv_history_records{%s fposdate} 
                                      demographics{vital_status year_of_death}
                                   }
                                 }}""" % (study, chunk, offset, variable)
@@ -339,8 +338,10 @@ def compare_survival(variable, tag=None):
                 ehaart = c['hiv_history_records'][0][variable]
                 vital_status = c['demographics'][0]['vital_status']
                 death_year = c['demographics'][0]['year_of_death']
+                fposdate = c['hiv_history_records'][0]['fposdate']
                 
-                if ehaart != None and vital_status != None:
+                
+                if ehaart != None and vital_status != None and fposdate != None:
                     values.setdefault(variable,[])
                     values[variable].append(ehaart)
                     
@@ -349,28 +350,31 @@ def compare_survival(variable, tag=None):
                     
                     values.setdefault('death_year',[])
                     if death_year != None and death_year != 9000:
-                        values['death_year'].append(death_year - 1970)
+                        values['death_year'].append(death_year - fposdate)
                     else:
-                        values['death_year'].append(2017 - 1970)
+                        values['death_year'].append(2017 - fposdate)
     
+        with open(filename, 'w') as fp:
+            json.dump(values, fp)
     
-    times = np.array(values['death_year'])
-    censors = np.array(values['vital_status'])
-    ix = np.array(values[variable])
+    # Prepare time for the two compared groups
+    t = np.array(values['death_year'])
+    t = t - min(t) + 1
+    times = t[t != max(t)]
+    fix = np.array(values[variable]) 
+    ix = fix[t != max(t)]   
+    censors = np.array([1]*len(times))                    
     
-    print times
-    print censors
-    print ix
-    
-    kmf = KaplanMeierFitter()
+    # Plot Kaplan-Meier curve
+    kmf = KaplanMeierFitter()    
     kmf.fit(times[ix], censors[ix], label='HAART Treated')
     ax = kmf.plot()
-
     kmf.fit(times[~ix], censors[~ix], label='Non HAART Treated') 
     kmf.plot(ax=ax)
+    ax.set_title(tag)
+    ax.set_xlabel("Survival time since seen seropositive (years)")
     
-    
-    return values               
+    return times               
     
     
 def compare_after_haart(variable, tag=None):
