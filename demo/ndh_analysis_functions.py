@@ -251,7 +251,7 @@ def compare_lab_results(variable, tag=None):
                 offset += chunk
                 
                 etime = datetime.datetime.now()
-                #print "Query (%s) %s" % (offset, str(etime-itime))
+                print "Query (%s) %s" % (offset, str(etime-itime))
 
             if tag == None:
                 tag = variable
