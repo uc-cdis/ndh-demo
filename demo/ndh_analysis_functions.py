@@ -100,7 +100,7 @@ def query_api(query_txt, variables=None):
     data = json.loads(output)
 
     if 'errors' in data:
-        print data
+        print(data)
 
     return data     
 
@@ -254,7 +254,7 @@ def compare_lab_results(project_id, variable, tag=None):
                 offset += chunk
                 
                 etime = datetime.datetime.now()
-                print "Query (%s) %s" % (offset, str(etime-itime))
+                print("Query (%s) %s" % (offset, str(etime-itime)))
 
             if tag == None:
                 tag = variable
@@ -330,7 +330,7 @@ def compare_survival(project_id, variable, tag=None):
                 offset += chunk
                 
                 etime = datetime.datetime.now()
-                print "Query (%s) %s" % (offset, str(etime-itime))
+                print("Query (%s) %s" % (offset, str(etime-itime)))
 
             if tag == None:
                 tag = variable
@@ -411,7 +411,7 @@ def compare_after_haart(project_id, variable, tag=None):
                 offset += chunk
                 
                 etime = datetime.datetime.now()
-                print "Query (%s) %s" % (offset, str(etime-itime))            
+                print("Query (%s) %s" % (offset, str(etime-itime)))          
 
             if tag == None:
                 tag = variable
