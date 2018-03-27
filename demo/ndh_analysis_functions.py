@@ -18,27 +18,27 @@ warnings.filterwarnings('ignore')
 
 summary_order = [
    "_study_count",
-   "_case_count",
+   "_subject_count",
    "_demographic_count",
    "_hiv_history_count",
-   "_core_visit_count",
+   "_follow_up_count",
    "_summary_socio_demographic_count",    
    "_summary_lab_result_count",
    "_summary_drug_use_count"
 ]
 
 summary_count_headers = {
-    "_case_count": "Cases",
+    "_subject_count": "Cases",
     "_study_count": "Studies",
     "_demographic_count": "Demographic records",
    "_hiv_history_count": "HIV History records",
-   "_core_visit_count": "Visit records",
+   "_follow_up_count": "Visit records",
    "_summary_lab_result_count": "Lab Results records",
    "_summary_drug_use_count": "AIDS Drug records",
    "_summary_socio_demographic_count": "Socio-Demographic records"
 }
 
-excluded_studies = ['study-01', 'MACS']
+excluded_studies = ['study-01']
 
 chunk = 50
 
@@ -83,28 +83,38 @@ class SummaryTable(dict):
 def add_keys(filename):
     ''' Get auth from our secret keys '''
 
-    global auth 
-    with open(filename,'r') as f:
-        secrets = json.load(f)
-    auth = get_auth(secrets['access_key'], secrets['secret_key'], 'submission')    
-    
+    global auth
+    json_data = open(filename).read()
+    keys = json.loads(json_data)
+    auth = requests.post('https://niaid.bionimbus.org/user/credentials/cdis/access_token', json=keys)
 
-def query_api(query_txt, variables = None):
+def query_api(query_txt, variables=None):
     ''' Request results for a specific query '''
 
     if variables == None:
         query = {'query': query_txt}
     else:
-        query = {'query': query_txt, 'variables': variables}        
-    
-    output = requests.post('https://niaid.bionimbus.org/api/v0/submission/graphql', auth=auth, json=query).text
-    data = json.loads(output)    
-    
-    if 'errors' in data:
-        print data    
-    
-    return data    
+        query = {'query': query_txt, 'variables': variables}
 
+    output = requests.post('https://niaid.bionimbus.org/api/v0/submission/graphql', headers={'Authorization': 'bearer ' + auth.json()['access_token']}, json=query).text
+    data = json.loads(output)
+
+    if 'errors' in data:
+        print data
+
+    return data     
+
+def get_studies(project_id):
+    ''' Get list of studies for specific project'''    
+
+    query_txt = """{ study(project_id: "%s"){ submitter_id }}""" % project_id
+    data = query_api(query_txt) 
+    
+    studies = []
+    for study in data['data']['study']:
+        studies.append(study['submitter_id'])
+    
+    return studies    
     
 def query_summary_counts(project_id):
     ''' Query summary counts for each data type'''
@@ -122,30 +132,24 @@ def query_summary_counts(project_id):
     
     return table
 
-def query_summary_field(node, field, study_id=None):
+def query_summary_field(project, node, field, study_id=None):
     ''' Query summary counts for each data type '''
    
-    count_query = """{ _%s_count }""" % node
-    counts = query_api(count_query)['data']['_case_count']
+    count_query = """{ _%s_count(project_id:"%s") }""" % (node, project)
+    counts = query_api(count_query)['data']['_%s_count' % node]
     offset = 0      
     chunk = 1000
     
     data = {}
     errors = {}
     while offset <= counts:
-        query_txt = """query { %s(first:%d, offset:%d, order_by_asc: "submitter_id") {%s studies{submitter_id}}} """ % (node, chunk, offset, field)  
+        query_txt = """query { %s(project_id: "%s", first:%d, offset:%d, order_by_asc: "submitter_id") {%s studies{submitter_id}}} """ % (node, project, chunk, offset, field)  
         output = query_api(query_txt)
         if not data:
             data = output
         else:
-            data['data']['case'] = data['data']['case'] + output['data']['case']
-        offset += chunk
-        #print offset
-
-    #if study_id != None:
-    #    query_txt = """query { %s(first:0, project_id: "%s") {%s}} """ % (node, study_id, field) 
-    #else:
-    #    query_txt = """query { %s(first:0) {%s studies{submitter_id}}} """ % (node, field)    
+            data['data']['subject'] = data['data']['subject'] + output['data']['subject']
+        offset += chunk  
       
     summary = {}
     total = []
@@ -215,10 +219,9 @@ def plot_overall_metrics(summary_counts, field, totals):
     plt.show()      
     
     
-def compare_lab_results(variable, tag=None):
+def compare_lab_results(project_id, variable, tag=None):
     ''' Compare any lab result variable after seropositive conversion'''
-    
-    studies = ['MACSv2', 'WIHS'] 
+        
     filename = '%s.json' % variable
     if os.path.isfile(filename):
         json_data=open(filename).read()
@@ -227,27 +230,27 @@ def compare_lab_results(variable, tag=None):
         values = {}
         values['Last Seronegative'] = []
         values['First Seropositive'] = []
+        studies = get_studies(project_id)
         for study in studies:
 
-            count_query = """{ study(submitter_id:"%s"){ _cases_count }}""" % study
-            counts = query_api(count_query)['data']['study'][0]['_cases_count']
+            count_query = """{ study(submitter_id:"%s"){ _subjects_count }}""" % study
+            counts = query_api(count_query)['data']['study'][0]['_subjects_count']
             offset = 0
-            #print counts
             chunk = 50
 
             data = {}
             errors = {}
             while offset <= counts:
                 itime = datetime.datetime.now()
-                query_txt = """{ study(submitter_id:"%s"){cases(first:%d, offset:%d, order_by_asc: "submitter_id"){ submitter_id hiv_history_records{posvis negvis} followups(first:0){
+                query_txt = """{ study(submitter_id:"%s"){subjects(first:%d, offset:%d, order_by_asc: "submitter_id"){ submitter_id hiv_history_records{posvis negvis} follow_ups(first:0){
                                            submitter_id 
                                            summary_lab_results{%s}
                                         }}}}""" % (study, chunk, offset, variable)
                 output = query_api(query_txt)
                 if not data:
-                    data = output['data']['study'][0]['cases']
+                    data = output['data']['study'][0]['subjects']
                 else:
-                    data = data + output['data']['study'][0]['cases']
+                    data = data + output['data']['study'][0]['subjects']
                 offset += chunk
                 
                 etime = datetime.datetime.now()
@@ -263,8 +266,8 @@ def compare_lab_results(variable, tag=None):
 
                 if negvis > 0:
                     visit_id = case + "_" + str(negvis)
-                    if c['followups'] != []:
-                        for visit in c['followups']:
+                    if c['follow_ups'] != []:
+                        for visit in c['follow_ups']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     negvalue = visit['summary_lab_results'][0][variable]
@@ -273,8 +276,8 @@ def compare_lab_results(variable, tag=None):
 
                 if posvis > 0:
                     visit_id = case + "_" + str(posvis)
-                    if c['followups'] != []:
-                        for visit in c['followups']:
+                    if c['follow_ups'] != []:
+                        for visit in c['follow_ups']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     posvalue = visit['summary_lab_results'][0][variable]
@@ -291,22 +294,21 @@ def compare_lab_results(variable, tag=None):
     return values
 
 
-def compare_survival(variable, tag=None):
+def compare_survival(project_id, variable, tag=None):
     ''' Compare survival with haart vs not ehaart'''
     
-    studies = ['MACS'] 
     filename = '%s_survival.json' % variable
     if os.path.isfile(filename):
         json_data=open(filename).read()
         values = json.loads(json_data)
     else:
         values = {}
+        studies = get_studies(project_id)
         for study in studies:
 
-            count_query = """{ study(submitter_id:"%s"){ _cases_count }}""" % study
-            counts = query_api(count_query)['data']['study'][0]['_cases_count']
+            count_query = """{ study(submitter_id:"%s"){ _subjects_count }}""" % study
+            counts = query_api(count_query)['data']['study'][0]['_subjects_count']
             offset = 0
-            print counts
             chunk = 100
 
             data = {}
@@ -314,7 +316,7 @@ def compare_survival(variable, tag=None):
             while offset <= counts:
                 itime = datetime.datetime.now()
                 query_txt = """{ study(submitter_id:"%s"){
-                                  cases(first:%d, offset:%d, order_by_asc: "submitter_id"){ 
+                                  subjects(first:%d, offset:%d, order_by_asc: "submitter_id"){ 
                                      submitter_id 
                                      hiv_history_records{%s fposdate} 
                                      demographics{vital_status year_of_death}
@@ -322,9 +324,9 @@ def compare_survival(variable, tag=None):
                                 }}""" % (study, chunk, offset, variable)
                 output = query_api(query_txt)
                 if not data:
-                    data = output['data']['study'][0]['cases']
+                    data = output['data']['study'][0]['subjects']
                 else:
-                    data = data + output['data']['study'][0]['cases']
+                    data = data + output['data']['study'][0]['subjects']
                 offset += chunk
                 
                 etime = datetime.datetime.now()
@@ -340,7 +342,6 @@ def compare_survival(variable, tag=None):
                 death_year = c['demographics'][0]['year_of_death']
                 fposdate = c['hiv_history_records'][0]['fposdate']
                 
-                
                 if ehaart != None and vital_status != None and fposdate != None:
                     values.setdefault(variable,[])
                     values[variable].append(ehaart)
@@ -353,7 +354,7 @@ def compare_survival(variable, tag=None):
                         values['death_year'].append(death_year - fposdate)
                     else:
                         values['death_year'].append(2017 - fposdate)
-    
+        
         with open(filename, 'w') as fp:
             json.dump(values, fp)
     
@@ -377,37 +378,36 @@ def compare_survival(variable, tag=None):
     return times               
     
     
-def compare_after_haart(variable, tag=None):
+def compare_after_haart(project_id, variable, tag=None):
     ''' Compare any lab result variable after seropositive conversion'''
     
-    studies = ['MACSv2', 'WIHS'] 
     filename = '%s_haart.json' % variable
     if os.path.isfile(filename):
         json_data=open(filename).read()
         values = json.loads(json_data)
     else:
         values = {'Last HAART Free': [], 'First HAART visit': [], '1 Year Treatment': [], '2 Years Treatment': [], '3 Years Treatment': []}
+        studies = get_studies(project_id)
         for study in studies:
 
-            count_query = """{ study(submitter_id:"%s"){ _cases_count }}""" % study
-            counts = query_api(count_query)['data']['study'][0]['_cases_count']
+            count_query = """{ study(submitter_id:"%s"){ _subjects_count }}""" % study
+            counts = query_api(count_query)['data']['study'][0]['_subjects_count']
             offset = 0
-            print counts
             chunk = 50
 
             data = {}
             errors = {}
             while offset <= counts:
                 itime = datetime.datetime.now()
-                query_txt = """{ study(submitter_id:"%s"){cases(first:%d, offset:%d, order_by_asc: "submitter_id"){ submitter_id hiv_history_records{frsthaav lastnohv} followups(first:0){
+                query_txt = """{ study(submitter_id:"%s"){subjects(first:%d, offset:%d, order_by_asc: "submitter_id"){ submitter_id hiv_history_records{frsthaav lastnohv} follow_ups(first:0){
                                            submitter_id 
                                            summary_lab_results{%s}
                                         }}}}""" % (study, chunk, offset, variable)
                 output = query_api(query_txt)
                 if not data:
-                    data = output['data']['study'][0]['cases']
+                    data = output['data']['study'][0]['subjects']
                 else:
-                    data = data + output['data']['study'][0]['cases']
+                    data = data + output['data']['study'][0]['subjects']
                 offset += chunk
                 
                 etime = datetime.datetime.now()
@@ -423,8 +423,8 @@ def compare_after_haart(variable, tag=None):
 
                 if lastnohv > 0:
                     visit_id = case + "_" + str(lastnohv)
-                    if c['followups'] != []:
-                        for visit in c['followups']:
+                    if c['follow_ups'] != []:
+                        for visit in c['follow_ups']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -435,8 +435,8 @@ def compare_after_haart(variable, tag=None):
                 if frsthaav > 0:
                     # First visit with treatment
                     visit_id = case + "_" + str(frsthaav)
-                    if c['followups'] != []:
-                        for visit in c['followups']:
+                    if c['follow_ups'] != []:
+                        for visit in c['follow_ups']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -445,8 +445,8 @@ def compare_after_haart(variable, tag=None):
 
                     # After one year of treatment
                     visit_id = case + "_" + str(frsthaav+20)
-                    if c['followups'] != []:
-                        for visit in c['followups']:
+                    if c['follow_ups'] != []:
+                        for visit in c['follow_ups']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -455,8 +455,8 @@ def compare_after_haart(variable, tag=None):
                                         
                     # After two year of treatment
                     visit_id = case + "_" + str(frsthaav+40)
-                    if c['followups'] != []:
-                        for visit in c['followups']:
+                    if c['follow_ups'] != []:
+                        for visit in c['follow_ups']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -466,8 +466,8 @@ def compare_after_haart(variable, tag=None):
 
                     # After three year of treatment
                     visit_id = case + "_" + str(frsthaav+60)
-                    if c['followups'] != []:
-                        for visit in c['followups']:
+                    if c['follow_ups'] != []:
+                        for visit in c['follow_ups']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
