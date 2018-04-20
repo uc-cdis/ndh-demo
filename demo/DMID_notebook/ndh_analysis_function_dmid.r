@@ -1,12 +1,13 @@
-require(httr)
-require(jsonlite)
-require(limma)
-require(dplyr)
-require(gplots)
-require(RColorBrewer)
-require(xml2)
-require(repr)
-require(VennDiagram)
+# Install and require dependent library
+source("http://www.bioconductor.org/biocLite.R")
+load.lib<-c("httr","jsonlite","dplyr","gplots","RColorBrewer","xml2","repr","VennDiagram")
+install.lib<-load.lib[!load.lib %in% installed.packages()]
+for(lib in install.lib) install.packages(lib,dependences=TRUE)
+load.s3<-c("limma")
+install.s3<-load.s3[!load.s3 %in% installed.packages()]
+for(s3 in install.s3) biocLite(s3,dependences=TRUE)
+sapply(load.lib,require,character=TRUE)
+sapply(load.s3,require,character=TRUE)
 
 # Input "credential.json" downloaded from data common profile page to generate access token for data query
 add_keys <- function(filename){
@@ -268,66 +269,114 @@ headmap_plot_across <- function(datasets,dataset1,dataset2){
 }
 
 # Protein differential expression were performed by t test using normalized protein expression profile as input. At each timepoint, virus infected group were compared to control group by applying t test. If both of the virus infected group and control groups having expression value for more than 2 samples, the t test is performed. Otherwise the fold change is recorded as NaN.  If the t test is performed, the t test p value is <0.05 and the virus infected group has higher protein level, the fold change is recorded as 1, otherwise is recorded as -1. If the p value is > 0.05, the fold change is recorded as 0. The fold change result is saved in file. The gene list of upregulated protein is return back.
-protein_DE_Ttest <- function(study_id,time=-1){
+protein_DE_test <- function(study_id,time=-1){
+    # Graphql meta data associated with data
     metadata = parse_cell_file(study_id,"protein","protein_expressions")
     viruses = unique(metadata$virus)
     timepoints = as.character(sort(as.numeric(unique(metadata$time_point)),decreasing = FALSE))
     timepoints = timepoints[timepoints!=time]
     filename = unique(metadata$FileName)
+    # Read normalized protein quantity
     protein_expression = read.table(paste(paste(study_id,"protein_expressions",sep="_"),filename,sep="/"),sep="\t",header=T)
-    statlist = list()
-    foldlist = list()
+    # Initialize list to store pvalue for t-test, expression change direction for t-test, pvalue for G-test and expression change direction for G-test for different timepoints and virus infections. Initialize vector to store protein symbols
+    tstatlist = list()
+    tfoldlist = list()
+    gstatlist = list()
+    gfoldlist = list()
     namelist = vector('character')
     n = 1
+    # Compare virus infection and control group one timepoint at a time
     for (timepoint in timepoints){
+    # Extract protein quantity for control at one specific timepoint
         control = protein_expression[,grepl(paste(paste("mock_NA",timepoint,sep="_"),"_",sep=""),names(protein_expression))]
+        # Extract protein quantity for one virus infection at a time and compare with control
         for (virus in viruses){
             if(!"mock_NA"%in% virus){
                 test = protein_expression[,grepl(paste(paste(virus,timepoint,sep="_"),"_",sep=""),names(protein_expression))]
-                stats = vector('numeric')
-                folds = vector('numeric')
+                # Initiate vectors to store pvalue for t-test, expression change direction for t-test, pvalue for G-test and expression change direction for G-test at specific timepoint and virus infection
+                tstats = vector('numeric')
+                tfolds = vector('numeric')
+                gstats = vector('numeric')
+                gfolds = vector('numeric')
+                # Perform t-test or G-test for each protein
                 for (i in 1:nrow(control)){
                     control_data = control[i,]
                     control_data = as.numeric(control_data[!is.na(control_data)])
                     test_data = test[i,]
                     test_data = as.numeric(test_data[!is.na(test_data)])
+                    # If both the control and infection groups having more than 2 samples, t-test is performed. Otherwise, G-test is performed.
                     if(length(control_data)>=2 && length(test_data)>=2){
-                        stats[i] = as.numeric(t.test(control_data, test_data)[c("p.value")])
-                        if(stats[i] <= 0.05 && mean(test_data)!=mean(control_data)){
-                            folds[i] = ifelse(mean(test_data)-mean(control_data)>0,1,-1)
-                        }else{folds[i]=0}
+                        tstats[i] = as.numeric(t.test(control_data, test_data,var.equal = TRUE)[c("p.value")])
+                        gstats[i] = "NaN"
+                        gfolds[i] = "NaN"
+                        if(tstats[i] <= 0.05 && mean(test_data)!=mean(control_data)){
+                            tfolds[i] = ifelse(mean(test_data)-mean(control_data)>0,1,-1)
+                        }else{tfolds[i]=0}
                     }else{
-                        stats[i] = 1
-                        folds[i] = "NaN"
+                        CO1 = length(control[i,!is.na(control[i,])])
+                        CA1 = length(control[i,is.na(control[i,])])
+                        CO2 = length(test[i,!is.na(test[i,])])
+                        CA2 = length(test[i,is.na(test[i,])])
+                        EO1 = length(control[i,])*(CO1 + CO2)/(CO1+CO2+CA1+CA2)
+                        EA1 = length(control[i,])*(CA1 + CA2)/(CO1+CO2+CA1+CA2)
+                        EO2 = length(test[i,])*(CO1 + CO2)/(CO1+CO2+CA1+CA2)
+                        EA2 = length(test[i,])*(CA1 + CA2)/(CO1+CO2+CA1+CA2)
+                        G = 2*(sum(CO1*log(CO1/EO1),CA1*log(CA1/EA1),CO2*log(CO2/EO2),CA2*log(CA2/EA2),na.rm=TRUE))
+                        gstats[i] = pchisq(G,1,lower.tail=FALSE)
+                        tstats[i] = "NaN"
+                        tfolds[i] = "NaN"
+                        if(gstats[i] <= 0.05 && CO1/(CO1+CA1)!= CO2/(CO2+CA2)){
+                            gfolds[i] = ifelse(CO1/(CO1+CA1) < CO2/(CO2+CA2),1,-1)
+                        }else{gfolds[i]=0}
                     }
                 }
-                statlist[[n]] = stats
-                foldlist[[n]] = folds
+                tstatlist[[n]] = tstats
+                tfoldlist[[n]] = tfolds
+                gstatlist[[n]] = gstats
+                gfoldlist[[n]] = gfolds
                 namelist[n] = paste(virus,timepoint,sep="_")
                 n = n + 1
             }
         }
     }
-    stat_matrix = data.frame(do.call(cbind,statlist))
-    fold_matrix = data.frame(do.call(cbind,foldlist))
-    names(stat_matrix) = sapply(namelist,function(x) paste("pvalue",x,sep="_"))
-    names(fold_matrix) = sapply(namelist,function(x) paste("tdiff",x,sep="_"))
-    row.names(stat_matrix) = protein_expression[,2]
-    row.names(fold_matrix) = protein_expression[,2]
-    write.table(fold_matrix,paste(study_id,"protein","folds",sep="_"),sep="\t",quote=F,col.names=T,row.names=T)
-    write.table(stat_matrix,paste(study_id,"protein","Ttest",sep="_"),sep="\t",quote=F,col.names=T,row.names=T)
-    significant_up = fold_matrix[apply(fold_matrix[,-1],MARGIN=1,function(x) 1%in%x),]
+    # Create dataframes: pvalue for t-test, expression change direction for t-test, pvalue for G-test and expression change direction for G-test at all timepoints
+    tstat_matrix = data.frame(do.call(cbind,tstatlist))
+    tfold_matrix = data.frame(do.call(cbind,tfoldlist))
+    gstat_matrix = data.frame(do.call(cbind,gstatlist))
+    gfold_matrix = data.frame(do.call(cbind,gfoldlist))
+    names(tstat_matrix) = sapply(namelist,function(x) paste("Tpvalue",x,sep="_"))
+    names(tfold_matrix) = sapply(namelist,function(x) paste("Tdiff",x,sep="_"))
+    names(gstat_matrix) = sapply(namelist,function(x) paste("Gpvalue",x,sep="_"))
+    names(gfold_matrix) = sapply(namelist,function(x) paste("Gdiff",x,sep="_"))
+    row.names(tstat_matrix) = protein_expression[,2]
+    row.names(tfold_matrix) = protein_expression[,2]
+    row.names(gstat_matrix) = protein_expression[,2]
+    row.names(gfold_matrix) = protein_expression[,2]
+    write.table(tfold_matrix,paste(study_id,"protein","Tfolds",sep="_"),sep="\t",quote=F,col.names=T,row.names=T)
+    write.table(tstat_matrix,paste(study_id,"protein","Ttest",sep="_"),sep="\t",quote=F,col.names=T,row.names=T)
+                                 write.table(gfold_matrix,paste(study_id,"protein","Gfolds",sep="_"),sep="\t",quote=F,col.names=T,row.names=T)
+                                 write.table(gstat_matrix,paste(study_id,"protein","Gtest",sep="_"),sep="\t",quote=F,col.names=T,row.names=T)
+    # Select up-regulated proteins tested by T-test or G-test
+    tsignificant_up = tfold_matrix[apply(tfold_matrix,MARGIN=1,function(x) 1%in%x),]
+    gsignificant_up = gfold_matrix[apply(gfold_matrix,MARGIN=1,function(x) 1%in%x),]
     print("T-test statistics:")
-    print(head(fold_matrix))
-    print(paste(nrow(significant_up),"Up-regulated protein list:",sep=" "))
-    return(gsub("_HUMAN","",row.names(significant_up)))
+    print(head(tfold_matrix))
+    print("G-test statistics:")
+    print(head(gfold_matrix))
+    num_significant = nrow(tsignificant_up) + nrow(gsignificant_up)
+    print(paste(num_significant,"Up-regulated protein list:",sep=" "))
+    protein_list = c(gsub("_HUMAN","",row.names(tsignificant_up)),gsub("_HUMAN","",row.names(gsignificant_up)))
+    return(protein_list)
 }
 
 # Upregulated proteins and ISG among the upregulated proteins were plotted using Veen Diagram.
 ISG_DE_protein <- function(study_id,signature){
-    fold_matrix = read.table(paste(study_id,"protein","folds",sep="_"),sep="\t",header=T,row.names=1)
-    significant_up = fold_matrix[apply(fold_matrix[,-1],MARGIN=1,function(x) 1%in%x),]
-    up_genes = gsub("_HUMAN","",row.names(significant_up))
+    tfold_matrix = read.table(paste(study_id,"protein","Tfolds",sep="_"),sep="\t",header=T,row.names=1)
+    tsignificant_up = tfold_matrix[apply(tfold_matrix,MARGIN=1,function(x) 1%in%x),]
+    gfold_matrix = read.table(paste(study_id,"protein","Gfolds",sep="_"),sep="\t",header=T,row.names=1)
+    gsignificant_up = gfold_matrix[apply(gfold_matrix,MARGIN=1,function(x) 1%in%x),]
+    up_genes = c(gsub("_HUMAN","",row.names(tsignificant_up)),gsub("_HUMAN","",row.names(gsignificant_up)))
+    print(length(up_genes))
     ISG_gene = read.table(signature)$V1
     print("Significant up-regulated ISG proteins:")
     print(intersect(up_genes,ISG_gene))

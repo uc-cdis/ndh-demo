@@ -22,7 +22,9 @@ summary_order_LHV = [
     "_mRNA_expression_count",
     "_protein_mass_spectrometry_count",
     "_peptide_expression_count",
-    "_protein_expression_count"
+    "_protein_expression_count",
+    "_lipid_mass_spectrometry_count",
+    "_metabolite_mass_spectrometry_count"
 ]
 
 # Create a dictionary of (query variables:header) pairs
@@ -40,7 +42,9 @@ summary_count_headers_LHV = {
     "_mRNA_expression_count": "mRNA Expression",
     "_protein_mass_spectrometry_count": "Protein Mass Spectrometry",
     "_peptide_expression_count": "Peptide Expression",
-    "_protein_expression_count": "Protein Expression"
+    "_protein_expression_count": "Protein Expression",
+    "_lipid_mass_spectrometry_count": "Lipid Mass Spectrometry",
+    "_metabolite_mass_spectrometry_count": "Metabolite Mass Spectrometry"
 }
 
 # Construct SummaryTable class with properties: content, summary_order and summary_header. SummaryTable is representated as a table.
@@ -95,7 +99,7 @@ def query_api(query_txt, variables=None):
     data = json.loads(output)
 
     if 'errors' in data:
-        print data
+        print(data)
 
     return data
 
@@ -128,6 +132,7 @@ def query_cell_lab():
             hours_to_collection
             virus_infections{
               strain
+              mutation
             }
             summary_lab_results(first:0){
               virus_titer_rep1
@@ -154,7 +159,7 @@ def query_cell_lab():
                 tp = str(sample['hours_to_collection'])
                 if composition == "Supernatant":
                     for infection in sample['virus_infections']:
-                        virus_id = infection['strain']
+                        virus_id = '_'.join(filter(None, [infection['strain'],infection['mutation']]))
                         if virus_id is not None:
                             virus_id = ("_").join(virus_id.split(" "))
                             studies[study_id].setdefault('Supernatant', {})
@@ -166,7 +171,7 @@ def query_cell_lab():
                                         studies[study_id]['Supernatant'][virus_id][tp].append(np.log10(lab[attribute]))
                 elif composition == "Cell":
                     for infection in sample['virus_infections']:
-                        virus_id = infection['strain']
+                        virus_id = '_'.join(filter(None, [infection['strain'],infection['mutation']]))
                         if virus_id is not None:
                             virus_id = ("_").join(virus_id.split(" "))
                             studies[study_id].setdefault("Cell", {})
@@ -195,6 +200,7 @@ def query_mouse_titer():
             }
             virus_infections(first:0){
               strain
+              mutation
             }
         }
       }
@@ -207,7 +213,7 @@ def query_mouse_titer():
         studies.setdefault(study_id, {})
         for subject in entity['subjects']:
             for infection in subject['virus_infections']:
-                virus_id = infection['strain']
+                virus_id = '_'.join(filter(None, [infection['strain'],infection['mutation']]))
                 studies[study_id].setdefault(virus_id, {})
             for follow_up in subject['follow_ups']:
                 day_id = str(follow_up['days_to_follow_up'])
@@ -227,25 +233,25 @@ def plot_cell_titer(studies):
     fig = plt.figure(figsize=(6, 4))
     for study in studies:
         virus_list = data[study]["Supernatant"].keys()
+        virus_list = filter(None, virus_list)
         for virus in virus_list:
-            if virus is not None:
-                times = list()
-                titer_aves = list()
-                titer_stds = list()
-                for timepoint in sorted(map(int, data[study]["Supernatant"][virus].keys())):
-                    tp_key = str(timepoint)
-                    if data[study]["Supernatant"][virus][tp_key]:
-                        titer_aves.append(np.mean(data[study]['Supernatant'][virus][tp_key]))
-                        titer_stds.append(np.std(data[study]['Supernatant'][virus][tp_key]))
-                        times.append(timepoint)
-                        all_timepoints.append(timepoint)
+            times = list()
+            titer_aves = list()
+            titer_stds = list()
+            for timepoint in sorted(map(int, data[study]["Supernatant"][virus].keys())):
+                tp_key = str(timepoint)
+                if data[study]["Supernatant"][virus][tp_key]:
+                    titer_aves.append(np.mean(data[study]['Supernatant'][virus][tp_key]))
+                    titer_stds.append(np.std(data[study]['Supernatant'][virus][tp_key]))
+                    times.append(timepoint)
+                    all_timepoints.append(timepoint)
 
-                ax1 = fig.add_subplot(111)
-                ax1.errorbar(times, titer_aves, yerr=titer_stds, fmt='-o', label=virus)
-                ax1.set_xlabel("Timepoint", fontsize=14)
-                ax1.set_ylabel("Virus Titer", fontsize=14)
-                ax1.set_xticks(times)
-                ax1.legend(loc='best', fancybox=True, framealpha=0.5)
+            ax1 = fig.add_subplot(111)
+            ax1.errorbar(times, titer_aves, yerr=titer_stds, fmt='-o', label=virus)
+            ax1.set_xlabel("Timepoint", fontsize=14)
+            ax1.set_ylabel("Virus Titer", fontsize=14)
+            ax1.set_xticks(times)
+            ax1.legend(loc='best', fancybox=True, framealpha=0.5)
         ax1.set_xticks(all_timepoints)
 
 
@@ -254,25 +260,25 @@ def plot_mouse_titer(study, virus_list=None):
     data = query_mouse_titer()
     if virus_list is None:
         virus_list = data[study].keys()
+        virus_list = filter(None, virus_list)
     fig = plt.figure(figsize=(6, 4))
     for virus in virus_list:
-        if virus is not None:
-            times = list()
-            titer_aves = list()
-            titer_stds = list()
-            for timepoint in sorted(map(int, data[study][virus].keys())):
-                tp_key = str(timepoint)
-                if data[study][virus][tp_key]:
-                    titer_aves.append(np.mean(data[study][virus][tp_key]))
-                    titer_stds.append(np.std(data[study][virus][tp_key]))
-                    times.append(timepoint)
+        times = list()
+        titer_aves = list()
+        titer_stds = list()
+        for timepoint in sorted(map(int, data[study][virus].keys())):
+            tp_key = str(timepoint)
+            if data[study][virus][tp_key]:
+                titer_aves.append(np.mean(data[study][virus][tp_key]))
+                titer_stds.append(np.std(data[study][virus][tp_key]))
+                times.append(timepoint)
 
-            ax1 = fig.add_subplot(111)
-            ax1.errorbar(times, titer_aves, yerr=titer_stds, fmt='-o', label=virus)
-            ax1.set_xlabel("Timepoint", fontsize=14)
-            ax1.set_ylabel("Virus Titer", fontsize=14)
-            ax1.set_xticks(times)
-            ax1.legend(loc='best', fancybox=True, framealpha=0.5)
+        ax1 = fig.add_subplot(111)
+        ax1.errorbar(times, titer_aves, yerr=titer_stds, fmt='-o', label=virus)
+        ax1.set_xlabel("Timepoint", fontsize=14)
+        ax1.set_ylabel("Virus Titer", fontsize=14)
+        ax1.set_xticks(times)
+        ax1.legend(loc='best', fancybox=True, framealpha=0.5)
 
 
 def plot_gRNA(studies):
@@ -281,21 +287,21 @@ def plot_gRNA(studies):
     fig = plt.figure(figsize=(6, 4))
     for study in studies:
         virus_list = data[study]["Cell"].keys()
+        virus_list = filter(None, virus_list)
         for virus in virus_list:
-            if virus is not None:
-                times = list()
-                gRNA = list()
-                for timepoint in sorted(map(int, data[study]["Cell"][virus].keys())):
-                    tp_key = str(timepoint)
-                    if data[study]["Cell"][virus][tp_key]:
-                        times.append(timepoint)
-                        gRNA.append(data[study]['Cell'][virus][tp_key])
-                ax1 = fig.add_subplot(111)
-                ax1.plot(times, gRNA, 'o-', label=virus)
-                ax1.set_xlabel("Timepoint", fontsize=14)
-                ax1.set_ylabel("gRNA", fontsize=14)
-                ax1.set_xticks(times)
-                ax1.legend(loc='best', fancybox=True, framealpha=0.5)
+            times = list()
+            gRNA = list()
+            for timepoint in sorted(map(int, data[study]["Cell"][virus].keys())):
+                tp_key = str(timepoint)
+                if data[study]["Cell"][virus][tp_key]:
+                    times.append(timepoint)
+                    gRNA.append(data[study]['Cell'][virus][tp_key])
+            ax1 = fig.add_subplot(111)
+            ax1.plot(times, gRNA, 'o-', label=virus)
+            ax1.set_xlabel("Timepoint", fontsize=14)
+            ax1.set_ylabel("gRNA", fontsize=14)
+            ax1.set_xticks(times)
+            ax1.legend(loc='best', fancybox=True, framealpha=0.5)
 
 
 def query_mouse_weight():
@@ -310,6 +316,7 @@ def query_mouse_weight():
             }
             virus_infections(first:0){
               strain
+              mutation
             }
         }
       }
@@ -326,7 +333,7 @@ def query_mouse_weight():
             studies.setdefault(study_id, {})
             for subject in entity['subjects']:
                 for infection in subject['virus_infections']:
-                    virus_id = infection['strain']
+                    virus_id = '_'.join(filter(None, [infection['strain'],infection['mutation']]))
                     studies[study_id].setdefault(virus_id, {})
                 for follow_up in subject['follow_ups']:
                     time = str(follow_up['days_to_follow_up'])
@@ -342,20 +349,20 @@ def plot_weight_percentage(study):
     data = query_mouse_weight()
     fig = plt.figure(figsize=(6, 4))
     virus_list = data[study].keys()
+    virus_list = filter(None, virus_list)
     for virus in virus_list:
-        if virus is not None:
-            times = list()
-            weight_aves = list()
-            weight_stds = list()
-            for timepoint in sorted(map(int, data[study][virus].keys())):
-                tp_key = str(timepoint)
-                if data[study][virus][tp_key]:
-                    weight_aves.append(np.mean(map(float, data[study][virus][tp_key])))
-                    weight_stds.append(np.std(map(float, data[study][virus][tp_key])))
-                    times.append(timepoint)
-            ax1 = fig.add_subplot(111)
-            ax1.errorbar(times, weight_aves, yerr=weight_stds, fmt='-o', label=virus)
-            ax1.set_xlabel("Timepoint", fontsize=14)
-            ax1.set_ylabel("weight_percentage", fontsize=14)
-            ax1.set_xticks(times)
-            ax1.legend(loc='best', fancybox=True, framealpha=0.5)
+        times = list()
+        weight_aves = list()
+        weight_stds = list()
+        for timepoint in sorted(map(int, data[study][virus].keys())):
+            tp_key = str(timepoint)
+            if data[study][virus][tp_key]:
+                weight_aves.append(np.mean(list(map(float, data[study][virus][tp_key]))))
+                weight_stds.append(np.std(list(map(float, data[study][virus][tp_key]))))
+                times.append(timepoint)
+        ax1 = fig.add_subplot(111)
+        ax1.errorbar(times, weight_aves, yerr=weight_stds, fmt='-o', label=virus)
+        ax1.set_xlabel("Timepoint", fontsize=14)
+        ax1.set_ylabel("weight_percentage", fontsize=14)
+        ax1.set_xticks(times)
+        ax1.legend(loc='best', fancybox=True, framealpha=0.5)
