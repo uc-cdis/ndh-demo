@@ -31,9 +31,9 @@ RUN mkdir virulence
 RUN mkdir virulence/utils
 
 ADD groups.csv ${HOME}/hyphy/virulence/
-ADD utils/ ${HOME}/hyphy/virulence/utils/
 ADD VirBGM.bf ${HOME}/hyphy/virulence/
 ADD createGBM.ibf ${HOME}/hyphy/virulence/
 ADD run_bgm_simulation.py ${HOME}/hyphy/virulence/
 
 WORKDIR ${HOME}/hyphy/virulence
+CMD ["python", "run_bgm_simulation.py"]

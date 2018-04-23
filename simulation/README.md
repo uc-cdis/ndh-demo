@@ -11,5 +11,5 @@ docker build -f Dockerfile -t ndh/hyphy .
 
 ## Docker usage
 ```
-docker run --rm -it -v <local_output_path>:/home/ubuntu/hyphy/virulence/data ndh/hyphy python run_bgm_simulation.py --matrix table_4A.csv --keys_file <path_to_credentials>
+docker run --rm -it -e INPUT_URL=<presigned_input_url> -e OUTPUT_URL=<presigned_output_url> ndh/hyphy
 ```
