@@ -13,7 +13,7 @@ outurl = os.environ['OUTPUT_URL']
 # Download file from preassigned URL
 matrix = 'matrix.csv'
 response = requests.get(inurl, stream=True)
-with open(output, 'wb') as out_file:
+with open(matrix, 'wb') as out_file:
     shutil.copyfileobj(response.raw, out_file)
 
 # Read binary matrix
