@@ -1,0 +1,82 @@
+USE_MPI_CACHING = 1;
+PRINT_DIGITS = -1;
+
+function create_edgelist (filename, edges, num_nodes, nodes)
+{	
+	
+  for (row = 0; row < num_nodes-1; row = row+1)
+	{
+	    for (col = row+1; col < num_nodes; col = col+1)
+	    {
+          edge = (nodes[row])["NodeID"]+","+ (nodes[col])["NodeID"];
+	        fprintf (filename, edge, ",", edges[edge], "\n");
+	    }
+	}
+  
+}
+
+function create_mcmc_graph (filename, threshold, edges, nodes)
+{	
+	fprintf (filename, CLEAR_FILE);
+	fprintf (filename, "graph foo\n{\n");
+	fprintf (filename, "\tsplines=\"line\";\n");
+  fprintf (filename, "\tnode [fontname=\"Helvetica\" fontsize=16 style=\"filled\" fillcolor=\"white\"];\n");
+	fprintf (filename, "\tedge [labelfontname=\"Helvetica\" fontsize=16 labelangle=30 labeldistance=2];\n");
+	
+    colors={};
+    colors[0] = "white";
+    colors[1] = "red";
+    colors[2] = "green";
+    colors[3] = "blue";
+    colors[4] = "yellow";
+    colors[5] = "purple";
+    colormap={};
+    col = 0;
+    for (_n = 0; _n < Abs(nodes); _n+=1) {
+            node = (nodes[_n])["NodeID"];
+            protein = node[1][3];
+            if (Abs(colormap[protein]) > 0){
+                 color = colormap[protein];
+            }
+            else {
+                 color = colors[col];
+                 col=col+1;
+                 colormap[protein] = color;
+            }
+            fprintf (filename, "\t", node);
+            fprintf (filename, " [shape=\"circle\", fillcolor=\""+ color +"\"];\n");
+    }
+	
+	
+	// sum edge posteriors in both directions between nodes X and Y, 
+	// and assign direction to the greater value
+	for (row = 0; row < num_nodes-1; row = row+1) {
+		for (col = row+1; col < num_nodes; col = col+1) {
+            edge = (nodes[row])["NodeID"]+","+ (nodes[col])["NodeID"];
+			if (edges[edge] > threshold) {
+				/*
+					This is really annoying - order MCMC reports edge marginal matrix with rows = child
+					whereas graph MCMC reports rows = parent
+				*/
+                                if (edges[edge] >= 0.5) { 
+                                   color = "green";
+                                   if (edges[edge] >= 0.6) {
+                                       color = "blue";
+                                       if (edges[edge] >= 0.8) {
+                                          color = "purple";
+                                          if (edges[edge] >= 0.9) {
+                                              color = "black";
+                                          }
+                                       }
+                                   }
+                                }
+			        fprintf (filename, "\t", (nodes[row])["NodeID"], "--", (nodes[col])["NodeID"], "[label=\"", Format(edges[edge]-0.05,3,1), "\", color=\"", color,"\",penwidth=3.0];\n");
+
+			}			
+		}
+	}
+	
+        fprintf (filename, "\t{rank=sink;\"Vir\";}\n");
+	fprintf (filename, "}\n");
+	return 0;
+}
