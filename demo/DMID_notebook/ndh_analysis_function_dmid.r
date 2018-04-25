@@ -2,10 +2,10 @@
 source("http://www.bioconductor.org/biocLite.R")
 load.lib<-c("httr","jsonlite","dplyr","gplots","RColorBrewer","xml2","repr","VennDiagram")
 install.lib<-load.lib[!load.lib %in% installed.packages()]
-for(lib in install.lib) install.packages(lib,dependences=TRUE)
+for(lib in install.lib) install.packages(lib,dependencies=TRUE)
 load.s3<-c("limma")
 install.s3<-load.s3[!load.s3 %in% installed.packages()]
-for(s3 in install.s3) biocLite(s3,dependences=TRUE)
+for(s3 in install.s3) biocLite(s3)
 sapply(load.lib,require,character=TRUE)
 sapply(load.s3,require,character=TRUE)
 
@@ -206,7 +206,7 @@ Select_ISG <- function(ISG,dataset){
     DE_gene = read.table(dataset,header=T,row.names=1)
     ISG_DE = DE_gene[rownames(DE_gene)%in%ISG_gene,]
     ISG_DE_order = ISG_DE[order(rev(ISG_DE)[5],decreasing = FALSE),]
-    write.table(ISG_DE_order,paste(dataset,"ISG.txt",sep="."),sep="\t",quote=F,col.names=T,row.names=T)
+    write.table(ISG_DE_order,paste(gsub(".txt","",dataset),"ISG.txt",sep="."),sep="\t",quote=F,col.names=T,row.names=T)
 }
 
 # Plot heatmap for each individual study ISG genes.
@@ -233,7 +233,7 @@ common_ISG <- function(ISG,datasets){
         DE_gene = read.table(datasets[i],header=T,row.names=1)
         ISG_DE = DE_gene[rownames(DE_gene)%in%ISG_gene,]
         ISG_DE_order = ISG_DE[order(rev(ISG_DE)[5],decreasing = FALSE),]
-        write.table(ISG_DE_order,paste(datasets[i],"ISG_common.txt",sep="."),sep="\t",quote=F,col.names=T,row.names=T)
+        write.table(ISG_DE_order,paste(gsub(".txt","",datasets[i]),"ISG_common.txt",sep="."),sep="\t",quote=F,col.names=T,row.names=T)
     }
     return(ISG_gene)
 }
@@ -254,7 +254,7 @@ order_ISG <- function(dataset1,dataset2){
 }
 
 # Plot heatmap across studies. The ISG signatures are ordered by function order_ISG.
-headmap_plot_across <- function(datasets,dataset1,dataset2){
+heatmap_plot_across <- function(datasets,dataset1,dataset2){
     gene_list = order_ISG(dataset1,dataset2)
     par(cex.main=0.4)
     for (i in 1:length(datasets)){
@@ -266,6 +266,20 @@ headmap_plot_across <- function(datasets,dataset1,dataset2){
         col_breaks = c(seq(-3,-0.75,length=10),seq(-0.74,0.74,length=10),seq(0.75,3,length=10))
         heatmap.2(ISG_DE_matrix,density.info="none",trace="none",margins =c(22,18),col=my_palette,Colv="NA",breaks=col_breaks,dendrogram="none",Rowv="NA",labRow=FALSE, colRow = FALSE,main=gsub(".DE.ISG","",datasets[i]),key=T, cexRow = 0.5, cexCol=0.5,keysize = 1.2,key.par = list(cex=0.5),lhei=c(1,6), lwid=c(1,3))
     }
+}
+# Plot heatmap for single study. The ISG signature are ordered by function order_ISG. The plot is saved in .png format with high resolution
+heatmap_plot_single <- function(dataset, dataset1,dataset2){
+    gene_list = order_ISG(dataset1,dataset2)
+    ISG_DE = read.table(dataset,header=T,row.names=1)
+    ISG_DE_order = ISG_DE[match(gene_list,rownames(ISG_DE)),]
+    ISG_DE_order = subset(ISG_DE_order,select = -c(AveExpr,F,P.Value,adj.P.Val))
+    ISG_DE_matrix = data.matrix(ISG_DE_order)
+    my_palette <- colorRampPalette(c("green", "black", "red"))
+    col_breaks = c(seq(-3,-0.75,length=10),seq(-0.74,0.74,length=10),seq(0.75,3,length=10))
+    par(mar=c(1,1,1,1))
+    png(paste(gsub(".txt","",dataset),"png",sep="."),height=1080,width=1080,res=100)
+    heatmap.2(ISG_DE_matrix,density.info="none",trace="none",col=my_palette,Colv="NA",breaks=col_breaks,dendrogram="none",Rowv="NA",labRow=FALSE, colRow = FALSE)
+    dev.off()
 }
 
 # Protein differential expression were performed by t test using normalized protein expression profile as input. At each timepoint, virus infected group were compared to control group by applying t test. If both of the virus infected group and control groups having expression value for more than 2 samples, the t test is performed. Otherwise the fold change is recorded as NaN.  If the t test is performed, the t test p value is <0.05 and the virus infected group has higher protein level, the fold change is recorded as 1, otherwise is recorded as -1. If the p value is > 0.05, the fold change is recorded as 0. The fold change result is saved in file. The gene list of upregulated protein is return back.
@@ -359,14 +373,10 @@ protein_DE_test <- function(study_id,time=-1){
     # Select up-regulated proteins tested by T-test or G-test
     tsignificant_up = tfold_matrix[apply(tfold_matrix,MARGIN=1,function(x) 1%in%x),]
     gsignificant_up = gfold_matrix[apply(gfold_matrix,MARGIN=1,function(x) 1%in%x),]
-    print("T-test statistics:")
-    print(head(tfold_matrix))
-    print("G-test statistics:")
-    print(head(gfold_matrix))
     num_significant = nrow(tsignificant_up) + nrow(gsignificant_up)
-    print(paste(num_significant,"Up-regulated protein list:",sep=" "))
+    print(paste(num_significant,"Up-regulated protein",sep=" "))
     protein_list = c(gsub("_HUMAN","",row.names(tsignificant_up)),gsub("_HUMAN","",row.names(gsignificant_up)))
-    return(protein_list)
+    return(head(protein_list,10))
 }
 
 # Upregulated proteins and ISG among the upregulated proteins were plotted using Veen Diagram.
