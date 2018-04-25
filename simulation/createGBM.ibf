@@ -76,6 +76,7 @@ function create_mcmc_graph (filename, threshold, edges, nodes)
 		}
 	}
 	
+        fprintf (filename, "\t{rank=sink;\"Vir\";}\n");
 	fprintf (filename, "}\n");
 	return 0;
 }
