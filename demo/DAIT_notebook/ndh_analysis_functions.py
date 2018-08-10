@@ -710,7 +710,7 @@ def plot_scatterfit(x,y,field,a=None,b=None):
     ax.legend(fontsize=14)
     ax.grid(True)          
         
-    plt.title(field + ' by Subject', fontsize=20)
+    plt.title(field + ' mg/dL by Subject', fontsize=20)
     plt.xlabel('AGE', fontsize=20)    
     plt.ylabel(field.upper(), fontsize=20)  
     plt.xticks(fontsize = 14)
@@ -749,41 +749,62 @@ def plot_lab_results(variable, groups, projects=None, timepoints=None):
     data = {}
     for idx, project in enumerate(projects):
         
-        # Log time
-        itime = datetime.datetime.now()
+        cached_file = project + '_lab_records.json'
         
-        # Get counts
-        count_query = '{ _subject_count(project_id: "%s")}' % (project)
-        counts = query_api(count_query)['data']['_subject_count']       
+        if os.path.isfile(cached_file):
+            for cfile in glob.glob('./' + project + '_lab_records*'):
+                json_data=open(cfile).read()
+                output = json.loads(json_data)  
+                if not data:
+                    data = output
+                else:
+                    data = data + output  
+            
+            #print("%s: %s Records" % (project, len(data)))
+        else:
+            
+            # Get counts
+            count_query = '{ _subject_count(project_id: "%s")}' % (project)
+            counts = query_api(count_query)['data']['_subject_count']       
 
-        # Create query with pagination
-        offset = 0
-        chunk = 200
-        while offset <= counts:
+            # Create query with pagination
+            offset = 0
+            chunk = 3
+            while offset <= counts:
 
-            query_txt = """{ subject(first:%s, offset:%s, project_id: "%s"){
-                                demographics{
-                                   %s
-                                   human_age_at_index
-                                }
-                                hiv_status
-                                project_id
-                                follow_ups(visit_number: %s){
-                                   age_at_visit
-                                   summary_lab_results{
-                                    %s
-                                }
-                            }}}""" % (chunk, offset, project, groups, timepoints[idx], variable)
+                # Log time
+                itime = datetime.datetime.now()            
 
-            output = query_api(query_txt)
-            if not data:
-                data = output['data']['subject']
-            else:
-                data = data + output['data']['subject']
-            offset += chunk
-         
-        etime = datetime.datetime.now()
-        print("Query (%s): %s" % (project, str(etime-itime)))
+                query_txt = """{ subject(first:%s, offset:%s, project_id: "%s", order_by_asc: "submitter_id"){
+                                    demographics{
+                                       %s
+                                       human_age_at_index
+                                       race
+                                    }
+                                    hiv_status
+                                    project_id
+                                    follow_ups(visit_number: %s){
+                                       age_at_visit
+                                       summary_lab_results{
+                                        %s
+                                        hdlchol
+                                    }
+                                }}}""" % (chunk, offset, project, groups, timepoints[idx], variable)
+
+                output = query_api(query_txt)
+                if not data:
+                    data = output['data']['subject']
+                else:
+                    data = data + output['data']['subject']
+                offset += chunk
+
+                etime = datetime.datetime.now()
+                print("Query %s (%s/%s): %s" % (project, offset, counts, str(etime-itime)))
+
+                if offset % 102 == 0:
+                    with open(cached_file, 'w') as fp:
+                       json.dump(data, fp)
+                    add_keys('credentials.json')
     
     neg = 0
     male = 0
@@ -797,6 +818,7 @@ def plot_lab_results(variable, groups, projects=None, timepoints=None):
             "Asian/Pacific Islander": "Asian",
             "Black": "Black",
             "White": "White",
+            "Multi-racial": "Other",
             "American Indian or Alaskan Native": "American Native"
         }
         # Prepare data for plot
@@ -845,7 +867,6 @@ def plot_lab_results(variable, groups, projects=None, timepoints=None):
                         xvalues[group].append(xval)
                         yvalues[group].append(yval)        
         
-        print([neg, male, female])
         # Show scatter plot
         plot_scatterfit(xvalues,yvalues,variable)
     
