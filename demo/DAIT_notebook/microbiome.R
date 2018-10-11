@@ -1,7 +1,17 @@
-load.lib<-c("httr","jsonlite","dplyr","xml2","repr","utils","ggplot2","reshape2","ggpubr","phyloseq")
-install.lib<-load.lib[!load.lib %in% installed.packages()]
-for(lib in install.lib) install.packages(lib,dependencies=TRUE)
+# install.packages("devtools") # we need this to install github packages
+# options(unzip = "unzip") # the default is "", we need to to set this option to unzip for installations
+# ## Install igraph from github
+# devtools::install_github("gaborcsardi/pkgconfig")
+# devtools::install_github("igraph/rigraph")
+# devtools::install_github("kassambara/ggpubr")
+## Now I can install phyloseq
+load.lib<-c("httr","jsonlite","xml2","repr","utils","ggplot2","reshape2","igraph","phyloseq","ggpubr")
+# install.lib<-load.lib[!load.lib %in% installed.packages()]
+# for(lib in install.lib) install.packages(lib,dependencies=TRUE, lib=NULL)
+# load.s3<-c("phyloseq")
+# install.s3<-load.s3[!load.s3 %in% installed.packages()]
 sapply(load.lib,require,character=TRUE)
+# sapply(load.s3,require,character=TRUE)
 
 options(warn=-1)
 #Create access key from credential file download from profile
@@ -15,7 +25,7 @@ add_keys <- function(filename){
 
 query_microbiome_info <-function(study_id,offset){
     query_txt = paste('{
-  study(submitter_id:"',study_id,'",project_id:"ndh-dait-microbiome"){
+  study(submitter_id:"',study_id,'",project_id: "ndh-dait-microbiome"){
     follow_ups(first:1,offset:',offset,'){
         visit_name
         subjects{
@@ -41,7 +51,7 @@ query_microbiome_info <-function(study_id,offset){
 
 query_subject_counts <-function(study_id){
     query_txt = paste('{
-        study(submitter_id:"',study_id,'",project_id:"ndh-dait-microbiome"){
+        study(submitter_id:"',study_id,'", project_id:"ndh-dait-microbiome"){
             _follow_ups_count
             }
         }',sep="")
@@ -62,8 +72,8 @@ query_api <- function(query_txt){
 parse_microbiome_info <- function(study_id){
     count_query = query_subject_counts(study_id)
     counts_response = query_api(count_query)
+    print(counts_response)
     counts = counts_response$study[[1]]$`_follow_ups_count`
-    print(counts)
     offset = 0
     int_data = data.frame(subject = character(), samples=character(), visit_name=character(), organ=character(), days=numeric(), uuid=character(),file_name=character())
     while(offset < counts){
@@ -246,14 +256,13 @@ beta_diversity_onesub <- function(study_id,subject){
     pc_euc_sub <- cmdscale(EuclDistMatrix_sub,k=4)
     write.table(pc_euc_sub,"pc_euc_sub.txt",sep="\t",quote=F, col.names=T, row.names=T)
     pc_euc_sub <- read.table("pc_euc_sub.txt",header=T, row.names=1)
-    names(pc_euc_sub) <- c("PCoA1","PCoA2","PCoA3","PCoA4")
+    names(pc_euc_sub) <- c("PC1","PC2","PC3","PC4")
     pc_sample_sub <- sample_data(physeq_sub)
     pc_sample_sub <- cbind(pc_euc_sub,pc_sample_sub)
-    pc_sample_sub$organ <- as.factor(pc_sample_sub$organ)
     par(mar=c(3,3,3,3))
-    p <- ggplot(pc_sample_sub, aes(PCoA1,PCoA2))
+    p <- ggplot(pc_sample_sub, aes(PC1,PC2))
     p + geom_point(size = 2, alpha = 0.3)
-    p + geom_point(aes(colour = organ),size=2)
+    p + geom_point(aes(colour = factor(organ)),size=2)
 }
 
 beta_diversity_organ <- function(study_id,organ,subjects){
