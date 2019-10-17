@@ -4,21 +4,11 @@ source("./Gen3AuthHelper.R")
 source("./Gen3Submission.R")
 options(warn=-1)
 
-# Please specify the json file path export from HIV cohort selection App
-PTC_json<-"~/Documents/NIAID/Charlie/LTNP_EC_PTC_analysis/ptc-cohort-vload-400-months-24.json"
-LTNP_json<-"~/Documents/NIAID/Charlie/LTNP_EC_PTC_analysis/ltnp-cohort-CD4-500-years-5.json"
-EC_json<-"~/Documents/NIAID/Charlie/LTNP_EC_PTC_analysis/ec-cohort-suppressvload-50-spikevload-1000-visits-2.json"
-
-# Specify data common end point, program, project, nodetype, immune_markers.
-endpoint<-"https://aids.niaiddata.org"
-program = "HIV"
-project = "CHARLIE"
-node_type = "summary_lab_result"
-inflammatory_markers = list("baff","bca1","crp","eotaxin","gmcsf","gp130","ifng","il10","il12","il17","il1b","il2","il4","il6","il8","mcp1","sil2ra","tnfa")
-
-# Create sub instance for the submission Class defined in Gen3 R SDK to export or query data from data common
-auth <- Gen3AuthHelper(endpoint, refresh_file="credentials.json")
-sub <- Gen3Submission(endpoint, auth)
+#################################
+#
+# Functions
+#
+################################
 
 # Query demographic propeties for subject using the sub instance
 query_demo<-function(subject_id){
@@ -108,33 +98,7 @@ summary_table<-function(target_matrixs,enum_variables,enum_values,categories,con
   return(variable_matrix)
 }
 
-# Read json file to identify subjects for each category
-PTC<-fromJSON(PTC_json)
-PTC_subjects <- PTC$subjects$subject_id
-LTNP<-fromJSON(LTNP_json)
-LTNP_subjects <- LTNP$subjects$subject_id
-EC<-fromJSON(EC_json)
-EC_subjects <- EC$subjects$subject_id
-
-# Create data frame for each category
-PTC_dataframe<-query_by_category(PTC_subjects)
-LTNP_dataframe<-query_by_category(LTNP_subjects)
-EC_dataframe<-query_by_category(EC_subjects)
-
-#summary table for selected variable for three categories
-summary_table(list(EC_dataframe,PTC_dataframe,LTNP_dataframe),list("baseline_hcv","ethnicity","race","race","smoke_status","gender","baseidu"),list("HCV positive","Hispanic or Latino","White","Black or African American", "Not currently smoking","female",TRUE),list("EC","PTC","LTNP"),list("baseline_age"))
-
-# Data availability at critical time point
-# Extract visit submitter_id at critical time point for PTC cases
-PTC_haart_end_visit<-PTC$subjects$consecutive_haart_treatments_end_at_followup
-PTC_maintain_visit<-PTC$subjects$stop_treatments_maintain_viral_load_at_followup
-PTC_critical_visit<-data.frame(subject_id = PTC_subjects, PTC_haart_end_visit = PTC_haart_end_visit, PTC_maintain_visit = PTC_maintain_visit)
-
-# Extract visit submitter_id at critical time point for LTNP cases
-LTNP_first_hiv_visit<-LTNP$subjects$first_hiv_positive_visit
-LTNP_first_qualify_visit<-LTNP$subjects$first_visit_qualify_ltnp
-LTNP_first_qualify_year<-LTNP$subjects$first_year_qualify_ltnp
-# write function to get the first visit of a specific vist year
+# Get the first visit of a specific vist year
 search_oneyear_after_visit<-function(subject){
   one_year_after = subject$first_year_qualify_ltnp + 1
   follow_ups = subject$follow_ups
@@ -145,13 +109,8 @@ search_oneyear_after_visit<-function(subject){
   }
   return("NA")
 }
-LTNP_qualify_oneyear_visit<-apply(LTNP$subjects,1,search_oneyear_after_visit)
-LTNP_critical_visit<-data.frame(LTNP_subjects = LTNP_subjects, LTNP_first_hiv_visit = LTNP_first_hiv_visit, LTNP_first_qualify_visit = LTNP_first_qualify_visit,LTNP_qualify_oneyear_visit = LTNP_qualify_oneyear_visit)
 
-# Extract visit submitter_id at critical time point for EC cases
-EC_first_hiv_visit<-EC$subjects$first_hiv_positive_visit
-sup_upper_bound <- EC$viral_load_sup_upper_bound
-# write function to get the frist visit that qualify EC criterial
+# Get the frist visit that qualify EC criterial
 search_qualify_visit<-function(subject){
   i = 0
   qualify_year=0
@@ -173,36 +132,6 @@ search_qualify_visit<-function(subject){
   my_list = list("qualify_visit" = qualify_visit,"one_year_after_visit" = "NA")
   return(my_list)
 }
-EC_qualify = apply(EC$subjects,1,search_qualify_visit)
-EC_first_qualify_visit = sapply(EC_qualify,function(l) l$qualify_visit)
-EC_qualify_oneyear_visit = sapply(EC_qualify,function(l) l$one_year_after_visit)
-
-EC_critical_visit<-data.frame(EC_subjects = EC_subjects, EC_first_hiv_visit = EC_first_hiv_visit, EC_first_qualify_visit = EC_first_qualify_visit, EC_qualify_oneyear_visit = EC_qualify_oneyear_visit)
-
-# export summary_lab_result node
-filename = paste(tolower(project),node_type,sep="_")
-filename = paste(filename,"tsv",sep=".")
-sub$export_node(program,project,node_type,"tsv",filename)
-
-#subset immune marker for visits at critical time point for three cohorts (LTNP, EC, PTC)
-lab_result = read.table(filename,header=T, sep="\t")
-
-#LTNP cohort
-num_ltnp_cases = dim(LTNP_critical_visit)[1]
-ltnp_first_hiv_visit_records<-merge(LTNP_critical_visit,lab_result,by.x="LTNP_first_hiv_visit",by.y="visits.submitter_id")
-ltnp_first_qualify_visit_records<-merge(LTNP_critical_visit,lab_result,by.x="LTNP_first_qualify_visit",by.y="visits.submitter_id")
-ltnp_qualify_oneyear_visit_records<-merge(LTNP_critical_visit,lab_result,by.x="LTNP_qualify_oneyear_visit",by.y="visits.submitter_id")
-
-#EC cohort
-num_ec_cases = dim(EC_critical_visit)[1]
-ec_first_hiv_visit_records<-merge(EC_critical_visit,lab_result, by.x = "EC_first_hiv_visit", by.y="visits.submitter_id")
-ec_first_qualify_visit_records<-merge(EC_critical_visit,lab_result, by.x = "EC_first_qualify_visit", by.y="visits.submitter_id")
-ec_qualify_oneyear_visit_records<-merge(EC_critical_visit,lab_result, by.x = "EC_qualify_oneyear_visit", by.y="visits.submitter_id")
-
-#PTC cohort
-num_ptc_cases = dim(PTC_critical_visit)[1]
-ptc_haart_end_visit_records<-merge(PTC_critical_visit,lab_result, by.x = "PTC_haart_end_visit", by.y="visits.submitter_id")
-ptc_maintain_visit_records<-merge(PTC_critical_visit,lab_result, by.x = "PTC_maintain_visit",by.y="visits.submitter_id")
 
 # Data availability at critical timepoint for inflammatory markers
 data_availability_percentage<-function(record, record_name, case_number, markers){
@@ -227,17 +156,7 @@ data_availability_matrix<-function(records,records_name,case_numbers, markers){
   return(do.call(cbind,percentage_matrix))
 }
 
-records = list(ltnp_first_hiv_visit_records,ltnp_first_qualify_visit_records,ltnp_qualify_oneyear_visit_records,ec_first_hiv_visit_records,ec_first_qualify_visit_records,ec_qualify_oneyear_visit_records,ptc_haart_end_visit_records,ptc_maintain_visit_records)
-
-records_name = list("ltnp_first_hiv_visit","ltnp_first_qualify_visit","ltnp_qualify_oneyear_visit","ec_first_hiv_visit","ec_first_qualify_visit","ec_qualify_oneyear_visit","ptc_haart_end_visit","ptc_maintain_visit")
-
-case_numbers = list(num_ltnp_cases,num_ltnp_cases,num_ltnp_cases,num_ec_cases,num_ec_cases,num_ec_cases,num_ptc_cases,num_ptc_cases)
-
-# Show data availability for three cohorts at critical time points
-data_availability_matrix(records,records_name,case_numbers, inflammatory_markers)
-
-# Box plots to compare inflammatory markers for three cohorts
-plot_markers = list("il2","il4","il6","ifng","gp130","gmcsf","bca1","tnfa")
+# Box plots to compare inflammatory markers among different cohorts
 box_plot_markers<-function(plot_markers,records,record_names){
   par(mfrow = c(2,4),mar=c(2,2,2,2))
   for (marker in plot_markers){
@@ -255,7 +174,123 @@ box_plot_markers<-function(plot_markers,records,record_names){
   }
 }
 
+
+#################################
+#
+#Input required for running functions
+#
+#################################
+
+# Please specify the json file path export from HIV cohort selection App
+PTC_json<-"~/Documents/NIAID/Charlie/LTNP_EC_PTC_analysis/ptc-cohort-vload-400-months-24.json"
+LTNP_json<-"~/Documents/NIAID/Charlie/LTNP_EC_PTC_analysis/ltnp-cohort-CD4-500-years-5.json"
+EC_json<-"~/Documents/NIAID/Charlie/LTNP_EC_PTC_analysis/ec-cohort-suppressvload-50-spikevload-1000-visits-2.json"
+
+# Specify data common end point, program, project, nodetype, immune_markers for data availability table and box plot.
+endpoint<-"https://aids.niaiddata.org"
+program = "HIV"
+project = "CHARLIE"
+node_type = "summary_lab_result"
+inflammatory_markers = list("baff","bca1","crp","eotaxin","gmcsf","gp130","ifng","il10","il12","il17","il1b","il2","il4","il6","il8","mcp1","sil2ra","tnfa")
+plot_markers = list("il2","il4","il6","ifng","gp130","gmcsf","bca1","tnfa")
+
+
+#################################
+#
+#Run functions
+#
+#################################
+
+# Create sub instance for the submission Class defined in Gen3 R SDK to export or query data from data common
+auth <- Gen3AuthHelper(endpoint, refresh_file="credentials.json")
+sub <- Gen3Submission(endpoint, auth)
+
+# Read json file to identify subjects for each category
+PTC<-fromJSON(PTC_json)
+PTC_subjects <- PTC$subjects$subject_id
+LTNP<-fromJSON(LTNP_json)
+LTNP_subjects <- LTNP$subjects$subject_id
+EC<-fromJSON(EC_json)
+EC_subjects <- EC$subjects$subject_id
+
+# Create data frame for each category
+PTC_dataframe<-query_by_category(PTC_subjects)
+LTNP_dataframe<-query_by_category(LTNP_subjects)
+EC_dataframe<-query_by_category(EC_subjects)
+
+# Data availability at critical time point
+# Extract visit submitter_id at critical time point for PTC cases
+PTC_haart_end_visit<-PTC$subjects$consecutive_haart_treatments_end_at_followup
+PTC_maintain_visit<-PTC$subjects$stop_treatments_maintain_viral_load_at_followup
+PTC_critical_visit<-data.frame(subject_id = PTC_subjects, PTC_haart_end_visit = PTC_haart_end_visit, PTC_maintain_visit = PTC_maintain_visit)
+
+# Extract visit submitter_id at critical time point for LTNP cases
+LTNP_first_hiv_visit<-LTNP$subjects$first_hiv_positive_visit
+LTNP_first_qualify_visit<-LTNP$subjects$first_visit_qualify_ltnp
+LTNP_first_qualify_year<-LTNP$subjects$first_year_qualify_ltnp
+LTNP_qualify_oneyear_visit<-apply(LTNP$subjects,1,search_oneyear_after_visit)
+LTNP_critical_visit<-data.frame(LTNP_subjects = LTNP_subjects, LTNP_first_hiv_visit = LTNP_first_hiv_visit, LTNP_first_qualify_visit = LTNP_first_qualify_visit,LTNP_qualify_oneyear_visit = LTNP_qualify_oneyear_visit)
+
+# Extract visit submitter_id at critical time point for EC cases
+EC_first_hiv_visit<-EC$subjects$first_hiv_positive_visit
+sup_upper_bound <- EC$viral_load_sup_upper_bound
+EC_qualify = apply(EC$subjects,1,search_qualify_visit)
+EC_first_qualify_visit = sapply(EC_qualify,function(l) l$qualify_visit)
+EC_qualify_oneyear_visit = sapply(EC_qualify,function(l) l$one_year_after_visit)
+
+EC_critical_visit<-data.frame(EC_subjects = EC_subjects, EC_first_hiv_visit = EC_first_hiv_visit, EC_first_qualify_visit = EC_first_qualify_visit, EC_qualify_oneyear_visit = EC_qualify_oneyear_visit)
+
+# export summary_lab_result node
+filename = paste(tolower(project),node_type,sep="_")
+filename = paste(filename,"tsv",sep=".")
+sub$export_node(program,project,node_type,"tsv",filename)
+
+#subset immune marker for visits at critical time point for three cohorts (LTNP, EC, PTC)
+lab_result = read.table(filename,header=T, sep="\t")
+#LTNP cohort
+num_ltnp_cases = dim(LTNP_critical_visit)[1]
+ltnp_first_hiv_visit_records<-merge(LTNP_critical_visit,lab_result,by.x="LTNP_first_hiv_visit",by.y="visits.submitter_id")
+ltnp_first_qualify_visit_records<-merge(LTNP_critical_visit,lab_result,by.x="LTNP_first_qualify_visit",by.y="visits.submitter_id")
+ltnp_qualify_oneyear_visit_records<-merge(LTNP_critical_visit,lab_result,by.x="LTNP_qualify_oneyear_visit",by.y="visits.submitter_id")
+
+#EC cohort
+num_ec_cases = dim(EC_critical_visit)[1]
+ec_first_hiv_visit_records<-merge(EC_critical_visit,lab_result, by.x = "EC_first_hiv_visit", by.y="visits.submitter_id")
+ec_first_qualify_visit_records<-merge(EC_critical_visit,lab_result, by.x = "EC_first_qualify_visit", by.y="visits.submitter_id")
+ec_qualify_oneyear_visit_records<-merge(EC_critical_visit,lab_result, by.x = "EC_qualify_oneyear_visit", by.y="visits.submitter_id")
+
+#PTC cohort
+num_ptc_cases = dim(PTC_critical_visit)[1]
+ptc_haart_end_visit_records<-merge(PTC_critical_visit,lab_result, by.x = "PTC_haart_end_visit", by.y="visits.submitter_id")
+ptc_maintain_visit_records<-merge(PTC_critical_visit,lab_result, by.x = "PTC_maintain_visit",by.y="visits.submitter_id")
+
+#################################
+#
+#Output tables or plots
+#
+#################################
+
+# Specify the argument, arguments are configurable if user prefer show different cohorts, enumerate attributes, enumerate attribute values, column names for the table and numerical attributes.
+
+target_matrixs = list(EC_dataframe,PTC_dataframe,LTNP_dataframe)
+enum_variables = list("baseline_hcv","ethnicity","race","race","smoke_status","gender","baseidu")
+enum_values = list("HCV positive","Hispanic or Latino","White","Black or African American", "Not currently smoking","female",TRUE)
+categories = list("EC","PTC","LTNP")
+continuous_variables = list("baseline_age")
+
+summary_table(target_matrixs,enum_variables,enum_values,categories,continuous_variables)
+
+# Show data availability for different cohorts at critical time points. The arguments are configurable if user want to show different cohorts at critical time points.
+
+records = list(ltnp_first_hiv_visit_records,ltnp_first_qualify_visit_records,ltnp_qualify_oneyear_visit_records,ec_first_hiv_visit_records,ec_first_qualify_visit_records,ec_qualify_oneyear_visit_records,ptc_haart_end_visit_records,ptc_maintain_visit_records)
+
+records_name = list("ltnp_first_hiv_visit","ltnp_first_qualify_visit","ltnp_qualify_oneyear_visit","ec_first_hiv_visit","ec_first_qualify_visit","ec_qualify_oneyear_visit","ptc_haart_end_visit","ptc_maintain_visit")
+
+case_numbers = list(num_ltnp_cases,num_ltnp_cases,num_ltnp_cases,num_ec_cases,num_ec_cases,num_ec_cases,num_ptc_cases,num_ptc_cases)
+
+data_availability_matrix(records,records_name,case_numbers, inflammatory_markers)
+
+# Box plots to compare inflammatory markers for different cohorts. Arguments are configurable if user want to compare different cohorts at critcal time points
 plot_records = list(ptc_haart_end_visit_records,ptc_maintain_visit_records,ec_first_qualify_visit_records,ltnp_first_qualify_visit_records)
 plot_names = list("ptc_haart_end_visit","ptc_maintain_visit","ec_first_qualify_visit","ltnp_first_qualify_visit")
 box_plot_markers(plot_markers,plot_records,plot_names)
-
