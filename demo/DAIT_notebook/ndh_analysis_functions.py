@@ -21,26 +21,21 @@ summary_order = [
    "_study_count",
    "_subject_count",
    "_demographic_count",
-   "_follow_up_count",
+   "_visit_count",
    "_sample_count",
-   "_aliquot_count", 
    "_summary_lab_result_count",
-   "_summary_drug_use_count"
+   "_treatment_count"
 ]
 
 summary_count_headers = {
     "_subject_count": "Cases",
     "_study_count": "Studies",
     "_demographic_count": "Demographic records",
-    "_follow_up_count": "Visit records",
+    "_visit_count": "Visit records",
     "_sample_count": "Samples", 
-    "_aliquot_count": "Aliquots", 
     "_summary_lab_result_count": "Lab Results records",
-    "_summary_drug_use_count": "Drug records"
+    "_treatment_count": "Drug records"
 }
-
-excluded_studies = ['study-01']
-excluded_projects = ['ndh-test', 'ndh-vir-simulation']
 
 chunk = 50
 
@@ -69,7 +64,7 @@ def add_keys(filename):
     global auth
     json_data = open(filename).read()
     keys = json.loads(json_data)
-    auth = requests.post('https://niaid.bionimbus.org/user/credentials/cdis/access_token', json=keys)    
+    auth = requests.post('https://aids.niaiddata.org/user/credentials/cdis/access_token', json=keys)    
     
 def get_keys():
     ''' Get auth from internal service '''
@@ -85,7 +80,7 @@ def query_api(query_txt, variables=None):
     else:
         query = {'query': query_txt, 'variables': variables}
 
-    output = requests.post('https://niaid.bionimbus.org/api/v0/submission/graphql', headers={'Authorization': 'bearer ' + auth.json()['access_token']}, json=query).text
+    output = requests.post('https://aids.niaiddata.org/api/v0/submission/graphql', headers={'Authorization': 'bearer ' + auth.json()['access_token']}, json=query).text
     data = json.loads(output)
 
     if 'errors' in data:
@@ -114,9 +109,8 @@ def get_projects():
    
     projects = []
     for pr in data['data']['project']:
-        if pr['project_id'] not in excluded_projects:
-            projects.append(pr['project_id'])
-    projects = sorted(projects)   
+        projects.append(pr['project_id'])
+    projects = sorted(projects)
 
     return projects
 
@@ -174,14 +168,19 @@ def query_summary_field(field, field_node, project_id = None):
         
         if 'project_id' in d:
             
-            if d['project_id'] in excluded_projects:
-                continue
-                
-            summary.setdefault(d['project_id'], {})
-            summary[d['project_id']].setdefault(d[field], 0)
-            summary[d['project_id']][d[field]] += 1
-            if d[field] not in total:
-                total.append(d[field])            
+            if field == "race" and d[field] is not None:
+                for value in d[field]: 
+                    summary.setdefault(d['project_id'], {})
+                    summary[d['project_id']].setdefault(value, 0)
+                    summary[d['project_id']][value] += 1
+                    if value not in total:
+                        total.append(value)
+            else:
+                summary.setdefault(d['project_id'], {})
+                summary[d['project_id']].setdefault(d[field], 0)
+                summary[d['project_id']][d[field]] += 1
+                if d[field] not in total:
+                    total.append(d[field])
         else:
             summary.setdefault(d[field], 0)        
             summary[d[field]] += 1
@@ -388,7 +387,7 @@ def compare_lab_results(project_id, variable, tag=None):
             errors = {}
             while offset <= counts:
                 itime = datetime.datetime.now()
-                query_txt = """{ study(submitter_id:"%s"){subjects(first:%d, offset:%d, order_by_asc: "submitter_id"){ submitter_id hiv_history_records{posvis negvis} follow_ups(first:0){
+                query_txt = """{ study(submitter_id:"%s"){subjects(first:%d, offset:%d, order_by_asc: "submitter_id"){ submitter_id hiv_history_records{posvis negvis} visits(first:0){
                                            submitter_id 
                                            summary_lab_results{%s}
                                         }}}}""" % (study, chunk, offset, variable)
@@ -412,8 +411,8 @@ def compare_lab_results(project_id, variable, tag=None):
 
                 if negvis != None and negvis > 0:
                     visit_id = case + "_" + str(negvis)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     negvalue = visit['summary_lab_results'][0][variable]
@@ -422,8 +421,8 @@ def compare_lab_results(project_id, variable, tag=None):
 
                 if posvis != None and posvis > 0:
                     visit_id = case + "_" + str(posvis)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     posvalue = visit['summary_lab_results'][0][variable]
@@ -553,7 +552,7 @@ def compare_after_haart(project_id, variable, tag=None):
             errors = {}
             while offset <= counts:
                 itime = datetime.datetime.now()
-                query_txt = """{ study(submitter_id:"%s"){subjects(first:%d, offset:%d, order_by_asc: "submitter_id"){ submitter_id hiv_history_records{frsthaav lastnohv} follow_ups(first:0){
+                query_txt = """{ study(submitter_id:"%s"){subjects(first:%d, offset:%d, order_by_asc: "submitter_id"){ submitter_id hiv_history_records{frsthaav lastnohv} visits(first:0){
                                            submitter_id 
                                            summary_lab_results{%s}
                                         }}}}""" % (study, chunk, offset, variable)
@@ -577,8 +576,8 @@ def compare_after_haart(project_id, variable, tag=None):
 
                 if lastnohv != None and lastnohv > 0:
                     visit_id = case + "_" + str(lastnohv)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -589,8 +588,8 @@ def compare_after_haart(project_id, variable, tag=None):
                 if frsthaav != None and frsthaav > 0:
                     # First visit with treatment
                     visit_id = case + "_" + str(frsthaav)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -599,8 +598,8 @@ def compare_after_haart(project_id, variable, tag=None):
 
                     # After one year of treatment
                     visit_id = case + "_" + str(frsthaav+20)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -609,8 +608,8 @@ def compare_after_haart(project_id, variable, tag=None):
                                         
                     # After two year of treatment
                     visit_id = case + "_" + str(frsthaav+40)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -620,8 +619,8 @@ def compare_after_haart(project_id, variable, tag=None):
 
                     # After three year of treatment
                     visit_id = case + "_" + str(frsthaav+60)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -744,7 +743,7 @@ def plot_lab_results(variable, groups, projects=None, timepoints=None):
         projects = get_projects()
     elif not isinstance(projects,list):
         projects = [projects]    
-        timepoints = [timepoints]
+    timepoints = [timepoints]
     
     data = {}
     for idx, project in enumerate(projects):
@@ -769,21 +768,18 @@ def plot_lab_results(variable, groups, projects=None, timepoints=None):
 
             # Create query with pagination
             offset = 0
-            chunk = 3
+            chunk = 50
             while offset <= counts:
-
                 # Log time
                 itime = datetime.datetime.now()            
-
                 query_txt = """{ subject(first:%s, offset:%s, project_id: "%s", order_by_asc: "submitter_id"){
                                     demographics{
                                        %s
-                                       human_age_at_index
                                        race
                                     }
                                     hiv_status
                                     project_id
-                                    follow_ups(visit_number: %s){
+                                    visits(visit_number: %s){
                                        age_at_visit
                                        summary_lab_results{
                                         %s
@@ -801,7 +797,7 @@ def plot_lab_results(variable, groups, projects=None, timepoints=None):
                 etime = datetime.datetime.now()
                 print("Query %s (%s/%s): %s" % (project, offset, counts, str(etime-itime)))
 
-                if offset % 102 == 0:
+                if offset % 100 == 0:
                     with open(cached_file, 'w') as fp:
                        json.dump(data, fp)
                     add_keys('credentials.json')
@@ -817,6 +813,7 @@ def plot_lab_results(variable, groups, projects=None, timepoints=None):
             "Asian": "Asian",
             "Asian/Pacific Islander": "Asian",
             "Black": "Black",
+            "Black or African American":"Black",
             "White": "White",
             "Multi-racial": "Other",
             "American Indian or Alaskan Native": "American Native"
@@ -825,18 +822,19 @@ def plot_lab_results(variable, groups, projects=None, timepoints=None):
         xvalues = {}
         yvalues = {} 
         for subj in data:
-            if 'follow_ups' in subj and len(subj['follow_ups'])>0 and \
-               'summary_lab_results' in subj['follow_ups'][0] and \
-                len(subj['follow_ups'][0]['summary_lab_results'])>0 \
-                and (subj['hiv_status'] == False or subj['hiv_status'] == None):
-                    group = dict_race[subj['demographics'][0][groups]]
-                    xvalues.setdefault(group,[])
-                    yvalues.setdefault(group,[])
-                    xval = group
-                    yval = subj['follow_ups'][0]['summary_lab_results'][0][variable]
-                    if xval != None and yval != None:
-                        xvalues[group].append(xval)
-                        yvalues[group].append(yval)        
+            if 'visits' in subj and len(subj['visits'])>0 and \
+               'summary_lab_results' in subj['visits'][0] and \
+                len(subj['visits'][0]['summary_lab_results'])>0 \
+                and (subj['hiv_status'] == "negative" or subj['hiv_status'] == None):
+                    for value in subj['demographics'][0][groups]:
+                        group = dict_race[value]
+                        xvalues.setdefault(group,[])
+                        yvalues.setdefault(group,[])
+                        xval = group
+                        yval = subj['visits'][0]['summary_lab_results'][0][variable]
+                        if xval != None and yval != None:
+                            xvalues[group].append(xval)
+                            yvalues[group].append(yval)        
         
         # Show violin plot
         plot_violin(xvalues,yvalues,variable)
@@ -846,23 +844,21 @@ def plot_lab_results(variable, groups, projects=None, timepoints=None):
         xvalues = {}
         yvalues = {} 
         for subj in data:
-            if subj['hiv_status'] == False:
+            if subj['hiv_status'] == "negative":
                 neg += 1
                 if subj['demographics'][0][groups] == "male":
                     male += 1
                 else:
                     female += 1
-            if 'follow_ups' in subj and len(subj['follow_ups'])>0 and \
-               'summary_lab_results' in subj['follow_ups'][0] and \
-                len(subj['follow_ups'][0]['summary_lab_results'])>0 \
-                and (subj['hiv_status'] == False or subj['hiv_status'] == None):
+            if 'visits' in subj and len(subj['visits'])>0 and \
+               'summary_lab_results' in subj['visits'][0] and \
+                len(subj['visits'][0]['summary_lab_results'])>0 \
+                and (subj['hiv_status'] == "negative" or subj['hiv_status'] == None):
                     group = subj['demographics'][0][groups] + '-' + subj['project_id']
                     xvalues.setdefault(group,[])
                     yvalues.setdefault(group,[])
-                    xval = subj['demographics'][0]['human_age_at_index']
-                    yval = subj['follow_ups'][0]['summary_lab_results'][0][variable]
-                    if xval == None:
-                        xval = subj['follow_ups'][0]['age_at_visit']
+                    yval = subj['visits'][0]['summary_lab_results'][0][variable]
+                    xval = subj['visits'][0]['age_at_visit']
                     if xval != None and yval != None:
                         xvalues[group].append(xval)
                         yvalues[group].append(yval)        

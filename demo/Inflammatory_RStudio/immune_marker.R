@@ -21,18 +21,27 @@ query_demo<-function(subject_id){
   }else{
     baseline_hcv = ""
   }
-  if(length(data[[1]]$exposures)!=0){
+  if(length(data[[1]]$exposures)!=0 &&length(data[[1]]$exposures[[1]]$ageatbl)!=0){
     baseline_age = data[[1]]$exposures[[1]]$ageatbl
-    baseline_idu = data[[1]]$exposures[[1]]$baseidu
   }else{
     baseline_age = ""
-    baseline_idu = ""
   }
-  for(i in 1:length(data[[1]]$demographics[[1]]$race)){
+  if(length(data[[1]]$exposures)!=0 && length(data[[1]]$exposures[[1]]$baseidu)!=0){
+    baseline_idu = data[[1]]$exposures[[1]]$baseidu
+  }else{
+    baseline_idu=""
+  }
+  if(length(data[[1]]$demographics[[1]]$race)==0){
+    races = c("NA")
+  }else{
+    races = data[[1]]$demographics[[1]]$race
+  }
+  for(i in 1:length(races)){
     if(length(data[[1]]$visits)!=0 && length(data[[1]]$visits[[1]]$summary_socio_demographics)!=0){
-      each_subject = data.frame(subject = subject_id, baseline_hcv = baseline_hcv,ethnicity=data[[1]]$demographics[[1]]$ethnicity,gender=data[[1]]$demographics[[1]]$gender,race=data[[1]]$demographics[[1]]$race[[i]],baseline_age = baseline_age,baseidu=baseline_idu,smoke_status = data[[1]]$visits[[1]]$summary_socio_demographics[[1]]$smoke_status)
-    }else{
-      each_subject = data.frame(subject = subject_id, baseline_hcv = baseline_hcv,ethnicity=data[[1]]$demographics[[1]]$ethnicity,gender=data[[1]]$demographics[[1]]$gender,race=data[[1]]$demographics[[1]]$race[[i]],baseline_age = baseline_age,baseidu=baseline_idu,smoke_status = "")
+      each_subject = data.frame(subject = subject_id, baseline_hcv = baseline_hcv,ethnicity=data[[1]]$demographics[[1]]$ethnicity,gender=data[[1]]$demographics[[1]]$gender,race=races[[i]],baseline_age = baseline_age,baseidu=baseline_idu,smoke_status = data[[1]]$visits[[1]]$summary_socio_demographics[[1]]$smoke_status)
+    }
+    else{
+      each_subject = data.frame(subject = subject_id, baseline_hcv = baseline_hcv,ethnicity=data[[1]]$demographics[[1]]$ethnicity,gender=data[[1]]$demographics[[1]]$gender,race=races[[i]],baseline_age = baseline_age,baseidu=baseline_idu,smoke_status = "")
     }
     datalist[[i]]= each_subject
   }
@@ -110,27 +119,70 @@ search_oneyear_after_visit<-function(subject){
   return("NA")
 }
 
-# Get the frist visit that qualify EC criterial
+# Get the visits that qualify EC criterial
 search_qualify_visit<-function(subject){
   i = 0
   qualify_year=0
-  ec_period = subject$ecPeriod.ec_perid_1
+  qualify_visits = vector()
+  ec_period = subject$ecPeriod.ec_period_1
+  one_year_after_visit = "NA"
+  qualify_visit_identify = FALSE
   for (row in 1:nrow(ec_period)){
     if (!is.na(ec_period[row,"viral_load"])&& ec_period[row,"viral_load"] < as.numeric(sup_upper_bound)){
       i = i + 1
       if(i == 2){
+        qualify_visit_identify = TRUE
         qualify_visit = ec_period[row,"submitter_id"]
         qualify_year = ec_period[row,"visit_date"]
       }
     }
+    if(qualify_visit_identify == TRUE){
+      qualify_visits = c(qualify_visits, ec_period[row,"submitter_id"])
+    }
     if (ec_period[row,"visit_date"] == qualify_year + 1){
       one_year_after_visit = ec_period[row,"submitter_id"]
-      my_list = list("qualify_visit" = qualify_visit,"one_year_after_visit" = one_year_after_visit)
-      return (my_list)
     }
   }
-  my_list = list("qualify_visit" = qualify_visit,"one_year_after_visit" = "NA")
+  my_list = list("qualify_visit" = qualify_visit,"one_year_after_visit" = one_year_after_visit, "qualify_visits" = qualify_visits)
   return(my_list)
+}
+
+# Get the first inflammatory markers value for visits that qualify the LTNP, PTC or EC case
+query_inflammatory_marker <- function(plot_markers, visits, cohort){
+  values = list()
+  for (i in 1:length(plot_markers)){
+    values[[i]] = "NA"
+    marker = plot_markers[[i]]
+    for (visit in visits){
+      query_txt = paste('{visit(submitter_id:\\"',visit,'\\"){summary_lab_results{', marker, '}}}',sep="")
+      output = sub$query(query_txt)
+      data = content(output)$data$visit
+      if (length(data[[1]]$summary_lab_result) !=0 && length(data[[1]]$summary_lab_results[[1]][[marker]])!=0){
+        values[[i]] = data[[1]]$summary_lab_results[[1]][[marker]]
+        break
+      }
+    }
+  }
+  df <- data.frame(matrix(unlist(values), nrow=1, byrow=T))
+  names(df) <- plot_markers
+  row.names(df) <- paste(strsplit(visits[[1]], "_")[[1]][1], cohort, sep = "_")
+  return (df)
+}
+
+# Get the inflammatory markers for all subjects
+query_inflammatory_all <- function(plot_markers, subjects, keyword, cohort){
+  records = list()
+  if (!nchar(keyword) == 0) {
+    data = subjects[[keyword]]
+  }else{
+    data = subjects
+  }
+  for (i in 1: length(data)){
+    visits = data[[i]]
+    values = query_inflammatory_marker(plot_markers,visits,cohort)
+    records[[i]] = values
+  }
+  return(do.call(rbind,records))
 }
 
 # Data availability at critical timepoint for inflammatory markers
@@ -168,11 +220,12 @@ box_plot_markers<-function(plot_markers,records,record_names){
       inflammatory_marker_values[[i]] = df
     }
     combine_data = do.call(rbind,inflammatory_marker_values)
-    boxplot(value~visit, data=combine_data,names=c("ptc_on","ptc_off","ec","ltnp"),cex.axis=0.5)
+    boxplot(as.numeric(value)~visit, data=combine_data,cex.axis=0.5)
     title(main=marker)
     stripchart(value~visit, vertical = TRUE, data = combine_data, method = "jitter", add = TRUE, pch = 20, col = 'blue')
   }
 }
+
 
 
 #################################
@@ -182,9 +235,9 @@ box_plot_markers<-function(plot_markers,records,record_names){
 #################################
 
 # Please specify the json file path export from HIV cohort selection App
-PTC_json<-"~/Documents/NIAID/Charlie/LTNP_EC_PTC_analysis/ptc-cohort-vload-400-months-24.json"
-LTNP_json<-"~/Documents/NIAID/Charlie/LTNP_EC_PTC_analysis/ltnp-cohort-CD4-500-years-5.json"
-EC_json<-"~/Documents/NIAID/Charlie/LTNP_EC_PTC_analysis/ec-cohort-suppressvload-50-spikevload-1000-visits-2.json"
+PTC_json<-"ptc-cohort-vload-500-months-18.json"
+LTNP_json<-"ltnp-cohort-CD4-500-years-5.json"
+EC_json<-"ec-cohort-suppressvload-50-spikevload-1000-visits-2.json"
 
 # Specify data common end point, program, project, nodetype, immune_markers for data availability table and box plot.
 endpoint<-"https://aids.niaiddata.org"
@@ -252,17 +305,21 @@ num_ltnp_cases = dim(LTNP_critical_visit)[1]
 ltnp_first_hiv_visit_records<-merge(LTNP_critical_visit,lab_result,by.x="LTNP_first_hiv_visit",by.y="visits.submitter_id")
 ltnp_first_qualify_visit_records<-merge(LTNP_critical_visit,lab_result,by.x="LTNP_first_qualify_visit",by.y="visits.submitter_id")
 ltnp_qualify_oneyear_visit_records<-merge(LTNP_critical_visit,lab_result,by.x="LTNP_qualify_oneyear_visit",by.y="visits.submitter_id")
+ltnp_all_qualify_visit_record = query_inflammatory_all(plot_markers,LTNP$subjects,"all_visit_qualify_ltnp","ltnp")
 
 #EC cohort
 num_ec_cases = dim(EC_critical_visit)[1]
 ec_first_hiv_visit_records<-merge(EC_critical_visit,lab_result, by.x = "EC_first_hiv_visit", by.y="visits.submitter_id")
 ec_first_qualify_visit_records<-merge(EC_critical_visit,lab_result, by.x = "EC_first_qualify_visit", by.y="visits.submitter_id")
 ec_qualify_oneyear_visit_records<-merge(EC_critical_visit,lab_result, by.x = "EC_qualify_oneyear_visit", by.y="visits.submitter_id")
+EC_all_qualify_visit = sapply(EC_qualify,function(l) l$qualify_visits)
+ec_all_qualify_visit_records = query_inflammatory_all(plot_markers,EC_all_qualify_visit,"","ec")
 
 #PTC cohort
 num_ptc_cases = dim(PTC_critical_visit)[1]
 ptc_haart_end_visit_records<-merge(PTC_critical_visit,lab_result, by.x = "PTC_haart_end_visit", by.y="visits.submitter_id")
 ptc_maintain_visit_records<-merge(PTC_critical_visit,lab_result, by.x = "PTC_maintain_visit",by.y="visits.submitter_id")
+ptc_all_maintian_visit_records = query_inflammatory_all(plot_markers,PTC$subjects,"all_maintain_viral_load_at_followup","ptcnh")
 
 #################################
 #
@@ -278,6 +335,15 @@ enum_values = list("HCV positive","Hispanic or Latino","White","Black or African
 categories = list("EC","PTC","LTNP")
 continuous_variables = list("baseline_age")
 
+# Number of EC paticipants
+print(length(EC_subjects))
+
+# Number of PTC paticipants
+print(length(PTC_subjects))
+
+# Number of LTNP paticipants
+print(length(LTNP_subjects))
+
 summary_table(target_matrixs,enum_variables,enum_values,categories,continuous_variables)
 
 # Show data availability for different cohorts at critical time points. The arguments are configurable if user want to show different cohorts at critical time points.
@@ -292,5 +358,10 @@ data_availability_matrix(records,records_name,case_numbers, inflammatory_markers
 
 # Box plots to compare inflammatory markers for different cohorts. Arguments are configurable if user want to compare different cohorts at critcal time points
 plot_records = list(ptc_haart_end_visit_records,ptc_maintain_visit_records,ec_first_qualify_visit_records,ltnp_first_qualify_visit_records)
-plot_names = list("ptc_haart_end_visit","ptc_maintain_visit","ec_first_qualify_visit","ltnp_first_qualify_visit")
+plot_names = list("ptch","ptcnh","ec","ltnp")
+box_plot_markers(plot_markers,plot_records,plot_names)
+
+# Box plots to compare inflammatory markers for different cohorts after the subject qualify the cohort definition. Arguments are configurable if user want to compare different cohorts at critcal time points
+plot_records = list(ptc_haart_end_visit_records,ptc_all_maintian_visit_records,ec_all_qualify_visit_records,ltnp_all_qualify_visit_record)
+plot_names = list("ptch","ptcnh","ec","ltnp")
 box_plot_markers(plot_markers,plot_records,plot_names)

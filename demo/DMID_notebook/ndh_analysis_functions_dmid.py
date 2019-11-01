@@ -18,8 +18,8 @@ summary_order_LHV = [
     "_virus_infection_count",
     "_summary_lab_result_count",
     "_aliquot_count",
-    "_mRNA_microarray_count",
-    "_mRNA_expression_count",
+    "_mrna_microarray_count",
+    "_mrna_expression_count",
     "_protein_mass_spectrometry_count",
     "_peptide_expression_count",
     "_protein_expression_count",
@@ -38,8 +38,8 @@ summary_count_headers_LHV = {
     "_virus_infection_count": "Virus Infection records",
     "_summary_lab_result_count": "Lab Results records",
     "_aliquot_count": "Aliquots",
-    "_mRNA_microarray_count": "mRNA Microarray",
-    "_mRNA_expression_count": "mRNA Expression",
+    "_mrna_microarray_count": "mRNA Microarray",
+    "_mrna_expression_count": "mRNA Expression",
     "_protein_mass_spectrometry_count": "Protein Mass Spectrometry",
     "_peptide_expression_count": "Peptide Expression",
     "_protein_expression_count": "Protein Expression",
@@ -82,8 +82,7 @@ def add_keys(filename):
     global auth
     json_data = open(filename).read()
     keys = json.loads(json_data)
-    auth = requests.post('https://niaid.bionimbus.org/user/credentials/cdis/access_token', json=keys)
-
+    auth = requests.post('https://flu.niaiddata.org/user/credentials/cdis/access_token', json=keys) 
 # query data from API using query text, returned data is in json format
 
 
@@ -95,7 +94,7 @@ def query_api(query_txt, variables=None):
     else:
         query = {'query': query_txt, 'variables': variables}
 
-    output = requests.post('https://niaid.bionimbus.org/api/v0/submission/graphql', headers={'Authorization': 'bearer ' + auth.json()['access_token']}, json=query).text
+    output = requests.post('https://flu.niaiddata.org/api/v0/submission/graphql', headers={'Authorization': 'bearer ' + auth.json()['access_token']}, json=query).text
     data = json.loads(output)
 
     if 'errors' in data:
@@ -124,7 +123,7 @@ def query_summary_counts(project_id, summary_order, summary_header):
 def query_cell_lab():
     ''' Graphql query text for querying virus, timepoint, virus titers and gRNA for cell line '''
     query_text = '''{
-      study(first:0,order_by_asc:"submitter_id",project_id: "ndh-dmid-LHV",with_path_to:{type:"subject",species:"Homo sapiens"}){
+      study(first:0,order_by_asc:"submitter_id",project_id: "FLU-LHV",with_path_to:{type:"subject",species:"Homo sapiens"}){
           submitter_id
           subjects(first:0){
           samples(first:0){
@@ -186,7 +185,7 @@ def query_cell_lab():
 def query_mouse_titer():
     ''' Graphql query text for querying virus, timepoint and virus titer for mouse '''
     query_txt = '''{
-      study(first:0,order_by_asc:"submitter_id",project_id: "ndh-dmid-LHV",with_path_to:{type:"subject",species:"Mus musculus"}){
+      study(first:0,order_by_asc:"submitter_id",project_id: "FLU-LHV",with_path_to:{type:"subject",species:"Mus musculus"}){
           submitter_id
           subjects(first:0){
             follow_ups(first:0){
@@ -307,7 +306,7 @@ def plot_gRNA(studies):
 def query_mouse_weight():
     ''' Graphql query text for querying virus, timepoint and weight_percentage for mouse '''
     query_txt = '''{
-      study(first:0,order_by_asc:"submitter_id",project_id: "ndh-dmid-LHV"){
+      study(first:0,order_by_asc:"submitter_id",project_id: "FLU-LHV"){
           submitter_id
           subjects(first:0, with_links:"follow_ups"){
             follow_ups(first:0){

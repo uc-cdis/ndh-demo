@@ -20,7 +20,7 @@ warnings.filterwarnings('ignore')
 res2Drug={"Ethambutol":'conferring resistance to ethambutol',"Isoniazid":'conferring resistance to isoniazid',"Pyrazinamide":'conferring resistance to pyrazinamide',"Rifampicin":'conferring resistance to rifampicin'}
 #res2Drug={"ethambutol":'ethambutol',"isoniazid":'isoniazid',"pyrazinamide":'pyrazinamide',"rifampicin":'rifampicin'}
 # Set up Gen3 SDK
-endpoint = "https://niaid.bionimbus.org/"
+endpoint = "https://tb.niaiddata.org/"
 auth = Gen3Auth(endpoint, refresh_file = "credentials.json")
 sub = Gen3Submission(endpoint, auth)
 file = Gen3File(endpoint, auth)
@@ -62,6 +62,8 @@ def parse_json(object_dict,chunk):
         fastq_submitter_id = object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_0_submitter_id'.format(i)]
         filename = 'Fastq_files/' + object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_0_file_name'.format(i)]
         object_id = object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_0_object_id'.format(i)]
+        print(object_id)
+        print(file.get_presigned_url(object_id,protocol="s3"))
         url = file.get_presigned_url(object_id,protocol="s3")['url']
         if not os.path.isfile(filename):
             print("Downloading %s"%(filename))
@@ -116,7 +118,7 @@ def runAriba(df):
 def extract_ariba_predict(dir):
     preds = dict()
     subfolders = [f.path for f in os.scandir(dir) if f.is_dir()]  
-    subfolders.remove("Ariba/output/.ipynb_checkpoints")
+   # subfolders.remove("Ariba/output/.ipynb_checkpoints")
     cmd = "ariba summary Ariba/out.summary"
     # append file end with report.tsv
     for p in subfolders:
@@ -241,7 +243,7 @@ def queryReads(subject):
 
 def submit_results(df,tool):
     # loop through result data frame to submit result to file node sequencing result
-    for index, row in df.iterrows():
+    for index, row in df.iteritems():
         pr = queryReads(index)
         submit_id = index + "_seq_res_" + tool.lower()
         d = '''
@@ -280,7 +282,7 @@ def submit_results(df,tool):
           {"submitter_id":"%s"},
           {"submitter_id":"%s"}]}]'''%(row["fn"],row["size"],row["md5"],submit_id,pr[0],pr[1])
         sr_json = json.loads(d)
-        res = sub.submit_record("ndh","patric-cryptic",sr_json)
+        res = sub.submit_record("TB","PATRIC",sr_json)
         # Print submission success code
         if json.loads(res)['code']==200:
             print("%s is successfully submitted"%(json.loads(res)["entities"][0]['unique_keys'][0]['submitter_id']))

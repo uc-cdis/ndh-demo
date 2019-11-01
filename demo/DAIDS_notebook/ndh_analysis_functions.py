@@ -1,8 +1,8 @@
-from cdispyutils.hmac4 import get_auth
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from lifelines.datasets import load_waltons
 from lifelines import KaplanMeierFitter
+from lifelines.statistics import logrank_test
 from scipy.stats import ranksums
 from operator import add
 import numpy as np
@@ -21,10 +21,10 @@ summary_order = [
    "_subject_count",
    "_demographic_count",
    "_hiv_history_count",
-   "_follow_up_count",
+   "_visit_count",
    "_summary_socio_demographic_count",    
    "_summary_lab_result_count",
-   "_summary_drug_use_count"
+   "_treatment"
 ]
 
 summary_count_headers = {
@@ -32,13 +32,13 @@ summary_count_headers = {
     "_study_count": "Studies",
     "_demographic_count": "Demographic records",
    "_hiv_history_count": "HIV History records",
-   "_follow_up_count": "Visit records",
+   "_visit_count": "Visit records",
    "_summary_lab_result_count": "Lab Results records",
-   "_summary_drug_use_count": "AIDS Drug records",
+   "_treatment": "AIDS Drug records",
    "_summary_socio_demographic_count": "Socio-Demographic records"
 }
 
-excluded_studies = ['study-01']
+excluded_studies = ['SDY420']
 
 chunk = 50
 
@@ -86,7 +86,7 @@ def add_keys(filename):
     global auth
     json_data = open(filename).read()
     keys = json.loads(json_data)
-    auth = requests.post('https://niaid.bionimbus.org/user/credentials/cdis/access_token', json=keys)
+    auth = requests.post('https://aids.niaiddata.org/user/credentials/cdis/access_token', json=keys) 
 
 def query_api(query_txt, variables=None):
     ''' Request results for a specific query '''
@@ -96,7 +96,7 @@ def query_api(query_txt, variables=None):
     else:
         query = {'query': query_txt, 'variables': variables}
 
-    output = requests.post('https://niaid.bionimbus.org/api/v0/submission/graphql', headers={'Authorization': 'bearer ' + auth.json()['access_token']}, json=query).text
+    output = requests.post('https://aids.niaiddata.org/api/v0/submission/graphql', headers={'Authorization': 'bearer ' + auth.json()['access_token']}, json=query).text
     data = json.loads(output)
 
     if 'errors' in data:
@@ -136,6 +136,7 @@ def query_summary_field(project, node, field, study_id=None):
     ''' Query summary counts for each data type '''
    
     count_query = """{ _%s_count(project_id:"%s") }""" % (node, project)
+    output = query_api(count_query)
     counts = query_api(count_query)['data']['_%s_count' % node]
     offset = 0      
     chunk = 1000
@@ -173,6 +174,7 @@ def query_summary_field(project, node, field, study_id=None):
     if study_id != None:
         plot_field_metrics(summary, field)
     else:
+        print(summary)
         plot_overall_metrics(summary, field, total)       
     
     return summary
@@ -207,7 +209,7 @@ def plot_overall_metrics(summary_counts, field, totals):
     for pr in sorted_projects:
         p = plt.barh(positions, results[pr], bar_size, left, align='center', alpha=0.7)        
         plots.append(p[0])
-        left = map(add, left, results[pr])
+        left = list(map(add, left, results[pr]))
         
     plt.title('Summary counts by (' + field + ')', fontsize=10*size_prop)
     plt.xlabel('COUNTS', fontsize=10*size_prop)    
@@ -242,7 +244,7 @@ def compare_lab_results(project_id, variable, tag=None):
             errors = {}
             while offset <= counts:
                 itime = datetime.datetime.now()
-                query_txt = """{ study(submitter_id:"%s"){subjects(first:%d, offset:%d, order_by_asc: "submitter_id"){ submitter_id hiv_history_records{posvis negvis} follow_ups(first:0){
+                query_txt = """{ study(submitter_id:"%s"){subjects(first:%d, offset:%d, order_by_asc: "submitter_id"){ submitter_id hiv_history_records{posvis negvis} visits(first:0){
                                            submitter_id 
                                            summary_lab_results{%s}
                                         }}}}""" % (study, chunk, offset, variable)
@@ -264,20 +266,20 @@ def compare_lab_results(project_id, variable, tag=None):
                 negvis = c['hiv_history_records'][0]['negvis']
                 posvis = c['hiv_history_records'][0]['posvis']
 
-                if negvis > 0:
+                if negvis != None and negvis > 0:
                     visit_id = case + "_" + str(negvis)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     negvalue = visit['summary_lab_results'][0][variable]
                                     if negvalue != None:
                                         values['Last Seronegative'].append(negvalue)              
 
-                if posvis > 0:
+                if posvis != None and posvis > 0:
                     visit_id = case + "_" + str(posvis)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     posvalue = visit['summary_lab_results'][0][variable]
@@ -288,22 +290,31 @@ def compare_lab_results(project_id, variable, tag=None):
             json.dump(values, fp)
     
     pvalues = run_statistical_test(values, 'Last Seronegative', 'First Seropositive')
+
          
     compare_boxplot(values, 'Comparison Seronegative/Seropositive', tag, pvalues)
     
     return values
 
 
-def compare_survival(project_id, variable, tag=None):
+def compare_survival(project_id, study_id, variable, tag=None):
     ''' Compare survival with haart vs not ehaart'''
     
-    filename = '%s_survival.json' % variable
+    if study_id:
+        filename = '%s_%s_survival.json' % (variable,study_id)
+    else:
+        filename = '%s_survival.json' % (variable)
+    
     if os.path.isfile(filename):
         json_data=open(filename).read()
         values = json.loads(json_data)
     else:
         values = {}
-        studies = get_studies(project_id)
+        if study_id:
+            studies = [study_id]
+        else:
+            studies = get_studies(project_id)
+        
         for study in studies:
 
             count_query = """{ study(submitter_id:"%s"){ _subjects_count }}""" % study
@@ -319,7 +330,7 @@ def compare_survival(project_id, variable, tag=None):
                                   subjects(first:%d, offset:%d, order_by_asc: "submitter_id"){ 
                                      submitter_id 
                                      hiv_history_records{%s fposdate} 
-                                     demographics{vital_status year_of_death}
+                                     demographics{year_of_death}
                                   }
                                 }}""" % (study, chunk, offset, variable)
                 output = query_api(query_txt)
@@ -330,7 +341,7 @@ def compare_survival(project_id, variable, tag=None):
                 offset += chunk
                 
                 etime = datetime.datetime.now()
-                print("Query (%s) %s" % (offset, str(etime-itime)))
+                print("Query %s (%s) %s" % (study, offset, str(etime-itime)))
 
             if tag == None:
                 tag = variable
@@ -338,23 +349,23 @@ def compare_survival(project_id, variable, tag=None):
             for c in data:
                 case = c['submitter_id']
                 ehaart = c['hiv_history_records'][0][variable]
-                vital_status = c['demographics'][0]['vital_status']
                 death_year = c['demographics'][0]['year_of_death']
                 fposdate = c['hiv_history_records'][0]['fposdate']
                 
-                if ehaart != None and vital_status != None and fposdate != None:
+                if ehaart != None and fposdate != None and fposdate < 2100:
                     values.setdefault(variable,[])
                     values[variable].append(ehaart)
                     
                     values.setdefault('vital_status',[])
-                    values['vital_status'].append(int(vital_status == 'Alive'))
-                    
                     values.setdefault('death_year',[])
-                    if death_year != None and death_year != 9000:
+                    
+                    if death_year!= None and death_year!=9000:
                         values['death_year'].append(death_year - fposdate)
+                        values['vital_status'].append(1)
                     else:
                         values['death_year'].append(2017 - fposdate)
-        
+                        values['vital_status'].append(0)
+                               
         with open(filename, 'w') as fp:
             json.dump(values, fp)
     
@@ -375,7 +386,10 @@ def compare_survival(project_id, variable, tag=None):
     ax.set_title(tag)
     ax.set_xlabel("Survival time since seen seropositive (years)")
     
-    return times               
+    results = logrank_test(times[ix], times[~ix], censors[ix], censors[~ix])
+      
+    print("statistic: %f"%results.test_statistic)
+    print("p value: %f"%results.p_value)             
     
     
 def compare_after_haart(project_id, variable, tag=None):
@@ -399,7 +413,7 @@ def compare_after_haart(project_id, variable, tag=None):
             errors = {}
             while offset <= counts:
                 itime = datetime.datetime.now()
-                query_txt = """{ study(submitter_id:"%s"){subjects(first:%d, offset:%d, order_by_asc: "submitter_id"){ submitter_id hiv_history_records{frsthaav lastnohv} follow_ups(first:0){
+                query_txt = """{ study(submitter_id:"%s"){subjects(first:%d, offset:%d, order_by_asc: "submitter_id"){ submitter_id hiv_history_records{frsthaav lastnohv} visits(first:0){
                                            submitter_id 
                                            summary_lab_results{%s}
                                         }}}}""" % (study, chunk, offset, variable)
@@ -421,10 +435,10 @@ def compare_after_haart(project_id, variable, tag=None):
                 lastnohv = c['hiv_history_records'][0]['lastnohv']
                 frsthaav = c['hiv_history_records'][0]['frsthaav']
 
-                if lastnohv > 0:
+                if lastnohv != None and lastnohv > 0:
                     visit_id = case + "_" + str(lastnohv)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -432,11 +446,11 @@ def compare_after_haart(project_id, variable, tag=None):
                                         values['Last HAART Free'].append(value)                        
                 
  
-                if frsthaav > 0:
+                if frsthaav != None and frsthaav > 0:
                     # First visit with treatment
                     visit_id = case + "_" + str(frsthaav)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -445,8 +459,8 @@ def compare_after_haart(project_id, variable, tag=None):
 
                     # After one year of treatment
                     visit_id = case + "_" + str(frsthaav+20)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -455,8 +469,8 @@ def compare_after_haart(project_id, variable, tag=None):
                                         
                     # After two year of treatment
                     visit_id = case + "_" + str(frsthaav+40)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -466,8 +480,8 @@ def compare_after_haart(project_id, variable, tag=None):
 
                     # After three year of treatment
                     visit_id = case + "_" + str(frsthaav+60)
-                    if c['follow_ups'] != []:
-                        for visit in c['follow_ups']:
+                    if c['visits'] != []:
+                        for visit in c['visits']:
                             if visit_id == visit['submitter_id']:
                                 if visit['summary_lab_results'] != []:
                                     value = visit['summary_lab_results'][0][variable]
@@ -494,6 +508,7 @@ def run_statistical_test(values, base, compare):
     
     pvalues = {}
     test = ranksums(values[base], values[compare])
+    print(test)
     pvalues[base] = -1
     pvalues[compare] = test.pvalue
       
@@ -535,8 +550,8 @@ def compare_boxplot(values, title, measure, pvalues, sorted_columns=None):
     for p, condition in zip(positions, columns):
         if pvalues[condition] >= 0:
             col = "red"
-            if pvalues[condition] < 0.01: col = "green"
-            plt.text(p, top*0.95, "p={0:.4f}".format(pvalues[condition]),
+            if pvalues[condition] < 0.001: col = "green"
+            plt.text(p, top*0.95, "p<0.001",
                  horizontalalignment='center', color=col, weight="bold")    
     
     plt.plot(positions, medians, 'r--', lw=2)

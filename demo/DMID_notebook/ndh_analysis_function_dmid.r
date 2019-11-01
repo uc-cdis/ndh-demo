@@ -1,11 +1,12 @@
 # Install and require dependent library
-source("http://www.bioconductor.org/biocLite.R")
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
 load.lib<-c("httr","jsonlite","dplyr","gplots","RColorBrewer","xml2","repr","VennDiagram")
 install.lib<-load.lib[!load.lib %in% installed.packages()]
 for(lib in install.lib) install.packages(lib,dependencies=TRUE)
 load.s3<-c("limma")
 install.s3<-load.s3[!load.s3 %in% installed.packages()]
-for(s3 in install.s3) biocLite(s3)
+for(s3 in install.s3) BiocManager::install(s3)
 sapply(load.lib,require,character=TRUE)
 sapply(load.s3,require,character=TRUE)
 
@@ -14,7 +15,7 @@ add_keys <- function(filename){
     json_data <- readChar(filename, file.info(filename)$size)
     keys <- fromJSON(json_data)
     variable <- jsonlite::toJSON(list(api_key = keys$api_key), auto_unbox = TRUE)
-    auth <- POST('https://niaid.bionimbus.org/user/credentials/cdis/access_token', add_headers("Content-Type" = "application/json"), body = variable)
+    auth <- POST('https://flu.niaiddata.org/user/credentials/cdis/access_token', add_headers("Content-Type" = "application/json"), body = variable)
     return(auth)
 }
 
@@ -32,7 +33,7 @@ query_cell_file <- function(study_id,aliquot_type,file_type){
         aliquots(first:0,with_links:"',file_type,'"){',
           file_type,'{
             file_name
-            id
+            object_id
           }
         }
       }
@@ -48,13 +49,13 @@ query_api <- function(query_txt){
     query_txt = query_txt
     query <- jsonlite::toJSON(list(query = query_txt), auto_unbox = TRUE)
     token <- paste('bearer', content(auth)$access_token, sep=" ")
-    response <- POST('https://niaid.bionimbus.org/api/v0/submission/graphql',add_headers("Authorization" = token, "Content-Type" = "application/json"), body = query)
+    response <- POST('https://flu.niaiddata.org/api/v0/submission/graphql',add_headers("Authorization" = token, "Content-Type" = "application/json"), body = query)
     return(content(response)$data)
 }
 
 # Organize response content and coverted to a table that has four columns "virus", "time_point","FileName" and "uuid"
 parse_cell_file<- function(study_id,aliquot_type,file_type){
-    query_txt = query_cell_file(study_id,aliquot_type,file_type)
+    query_txt = query_cell_file(study_id,aliquot_type,tolower(file_type))
     response = query_api(query_txt)
     data = response$study[[1]]$subjects[[1]][[1]]
     datalist = list()
@@ -71,7 +72,7 @@ parse_cell_file<- function(study_id,aliquot_type,file_type){
             mutation = mutation
         }else{
         mutation = "NA"}
-        entities = sapply(instance$aliquots,function(x) x[[file_type]])
+        entities = sapply(instance$aliquots,function(x) x[[tolower(file_type)]])
         files = vector('character')
         ids = vector('character')
         j = 0
@@ -79,14 +80,14 @@ parse_cell_file<- function(study_id,aliquot_type,file_type){
             if(!(is.null(entity$file))){
                 j = j + 1
                 files[j] = entity$file
-                ids[j] = entity$id
+                ids[j] = entity$object_id
 
             }else{
                 m = 1
                 for (ind in entity){
                     n = j + m
                     files[n] = ind$file
-                    ids[n] = ind$id
+                    ids[n] = ind$object_id
                     m = m + 1
                 }
                 j = n
@@ -95,7 +96,7 @@ parse_cell_file<- function(study_id,aliquot_type,file_type){
         }
         if(length(files)!=0){
             for (index in 1:length(files)){
-            each_aliquot = data.frame(virus = paste(strain,mutation,sep="_"), time_point = hours_to_collection, FileName = files[index],uuid = ids[index])
+            each_aliquot = data.frame(virus = paste(strain,mutation,sep="_"), time_point = hours_to_collection, FileName = files[index],object_id = ids[index])
             datalist[[i]] = each_aliquot
             i = i+1
             }
@@ -110,21 +111,14 @@ download_data <- function(study_id,aliquot_type,file_type){
     if(!dir.exists(file.path(paste(study_id,file_type,sep="_")))){
         dir.create(file.path(paste(study_id,file_type,sep="_")))
         metadata = parse_cell_file(study_id,aliquot_type,file_type)
-        download_matrix = unique(data.frame(uuid=metadata$uuid,file_name=metadata$FileName))
+        download_matrix = unique(data.frame(object_id=metadata$object_id,file_name=metadata$FileName))
         auth = add_keys("credentials.json")
         token <- paste('bearer', content(auth)$access_token, sep=" ")
-        # Based on file_type, download file from aws s3 or ftp_url
-        if(file_type %in% c("mRNA_microarrays","protein_expressions")){
-            for (i in 1:length(download_matrix$uuid)){
-            response <- GET(paste('https://niaid.bionimbus.org/user/data/download/',download_matrix$uuid[i],sep=""),add_headers("Authorization" = token))
-            response_file <- GET(content(response)$url,write_disk(file.path(paste(paste(study_id,file_type,sep="_"),download_matrix$file_name[i],sep="/")),overwrite=TRUE))
-        }
-        }else{
-           for(i in 1:length(download_matrix$uuid)){
-               response <- GET(paste('https://niaid.bionimbus.org/index/index/',download_matrix$uuid[i],sep=""),add_headers("Authorization" = token))
-system(paste("wget","-O",paste(paste(study_id,file_type,sep="_"),download_matrix$file_name[i],sep="/"),content(response)$urls[[1]],sep=" "),intern=TRUE)
+        # Download file from aws s3 or ftp_url
+        for(i in 1:length(download_matrix$object_id)){
+               response <- GET(paste('https://flu.niaiddata.org/user/data/download/',download_matrix$object_id[i],sep=""),add_headers("Authorization" = token))
+response_file <- GET(content(response)$url,write_disk(file.path(paste(paste(study_id,file_type,sep="_"),download_matrix$file_name[i],sep="/")),overwrite=TRUE))
            }
-        }
         return("Finished Downloading")
     }else{return("Data Already Exist")}
 }
@@ -132,8 +126,8 @@ system(paste("wget","-O",paste(paste(study_id,file_type,sep="_"),download_matrix
 # Use function parse_cell_file to create design matrix. Use design matrix and downloaded files as input to create the aggregated normalized gene expression data frame
 array_normalization <- function(study_id){
     # Load arrays
-    array_Dir <- paste(study_id,"mRNA_microarrays",sep="_")
-    meta = parse_cell_file(study_id,"RNA","mRNA_microarrays")
+    array_Dir <- paste(study_id,"mrna_microarrays",sep="_")
+    meta = parse_cell_file(study_id,"RNA","mrna_microarrays")
     meta$SampleName = sub(".txt","",meta$FileName)
     meta$uuid <- NULL
     study_array <- list()
@@ -170,7 +164,7 @@ aggregate_gene_exp <- function(study_id){
 # Implement limma package to perform differential gene expression analysis. The return data frame have log2FC at each timepoint. The overall p-value and adjusted p-value using Benjermin multiple test correction
 DE_gene <-function(study_id,virus,exclude_time_points=NULL){
     # Create design matrix
-    targets = parse_cell_file(study_id,"RNA","mRNA_microarrays")
+    targets = parse_cell_file(study_id,"RNA","mrna_microarrays")
     targets$virus = gsub(" ","_",targets$virus)
     target = paste(targets$virus,targets$time_point,sep=".")
     times = sort(unique(targets$time_point),decreasing = FALSE)
@@ -266,6 +260,7 @@ heatmap_plot_across <- function(datasets,dataset1,dataset2){
         col_breaks = c(seq(-3,-0.75,length=10),seq(-0.74,0.74,length=10),seq(0.75,3,length=10))
         heatmap.2(ISG_DE_matrix,density.info="none",trace="none",margins =c(22,18),col=my_palette,Colv="NA",breaks=col_breaks,dendrogram="none",Rowv="NA",labRow=FALSE, colRow = FALSE,main=gsub(".DE.ISG","",datasets[i]),key=T, cexRow = 0.5, cexCol=0.5,keysize = 1.2,key.par = list(cex=0.5),lhei=c(1,6), lwid=c(1,3))
     }
+    dev.off()
 }
 # Plot heatmap for single study. The ISG signature are ordered by function order_ISG. The plot is saved in .png format with high resolution
 heatmap_plot_single <- function(dataset, dataset1,dataset2){
@@ -279,7 +274,6 @@ heatmap_plot_single <- function(dataset, dataset1,dataset2){
     par(mar=c(1,1,1,1))
     png(paste(gsub(".txt","",dataset),"png",sep="."),height=1080,width=1080,res=100)
     heatmap.2(ISG_DE_matrix,density.info="none",trace="none",col=my_palette,Colv="NA",breaks=col_breaks,dendrogram="none",Rowv="NA",labRow=FALSE, colRow = FALSE)
-    dev.off()
 }
 
 # Protein differential expression were performed by t test using normalized protein expression profile as input. At each timepoint, virus infected group were compared to control group by applying t test. If both of the virus infected group and control groups having expression value for more than 2 samples, the t test is performed. Otherwise the fold change is recorded as NaN.  If the t test is performed, the t test p value is <0.05 and the virus infected group has higher protein level, the fold change is recorded as 1, otherwise is recorded as -1. If the p value is > 0.05, the fold change is recorded as 0. The fold change result is saved in file. The gene list of upregulated protein is return back.

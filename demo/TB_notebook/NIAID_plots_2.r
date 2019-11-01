@@ -8,7 +8,7 @@
 library(devtools)
 #install_github("hrbrmstr/waffle")
 library(ggplot2)
-library(waffle)
+#library(waffle)
 library(htmlwidgets)
 library(pheatmap)
 library(grid)
@@ -20,7 +20,7 @@ heat_map <- function(){
   clean_df[clean_df == 'no'] <- 0
   rownames(clean_df) <- clean_df$name
   plot_df <- data.matrix(clean_df[,2:57])
-  hmcols<- colorRampPalette(c("pink","lawngreen"))(2)
+  hmcols<- colorRampPalette(c("red","blue"))(2)
 
   p =pheatmap(plot_df, cluster_row=T,cluster_cols =F,color=hmcols,
      fontsize=10, fontsize_col=5,scale="none",legend_breaks=c(0,0.25,0.5,0.75,1),
@@ -45,28 +45,28 @@ scatter_plot <- function(){
 
 grid_plot <- function(){
   #A-RIFA
-  p1 <- waffle(c(Match = 600, Not_Match = 56,Not_Available=0), rows = 16, keep = FALSE,size = .2,colors = c("lawngreen","pink",'grey'),
+  p1 <- waffle(c(Match = 600, Not_Match = 56,Not_Available=0), rows = 16, keep = FALSE,size = .2,colors = c("blue","red",'grey'),
   legend_pos = c(16,16))
   #A-ETH
-  p2 <- waffle(c(Match = 413, Not_Match = 243,Not_Available=0), rows = 16, keep = FALSE,size = .2,colors = c("lawngreen","pink",'grey'),
+  p2 <- waffle(c(Match = 413, Not_Match = 243,Not_Available=0), rows = 16, keep = FALSE,size = .2,colors = c("blue","red",'grey'),
   legend_pos = c(16,16))
 #A-ISO
-  p3 <- waffle(c(Match = 519, Not_Match = 137,Not_Available=0), rows = 16, keep = FALSE,size = .2,colors = c("lawngreen","pink",'grey'),
+  p3 <- waffle(c(Match = 519, Not_Match = 137,Not_Available=0), rows = 16, keep = FALSE,size = .2,colors = c("blue","red",'grey'),
   legend_pos = c(16,16))
 #A-PYR
-  p4 <- waffle(c(Match = 539, Not_Match = 113, Not_Available=4), rows = 16, keep = FALSE,size = .2,colors = c("lawngreen","pink",'grey'),
+  p4 <- waffle(c(Match = 539, Not_Match = 113, Not_Available=4), rows = 16, keep = FALSE,size = .2,colors = c("blue","red",'grey'),
   legend_pos = c(16,16))
 #M-RIFA
-  p5 <- waffle(c(Match = 613, Not_Match = 43,Not_Available=0), rows = 16, keep = FALSE,size = .2,colors = c("lawngreen","pink",'grey'),
+  p5 <- waffle(c(Match = 613, Not_Match = 43,Not_Available=0), rows = 16, keep = FALSE,size = .2,colors = c("blue","red",'grey'),
   legend_pos = c(16,16))
 #M-ETH
-  p6 <- waffle(c(Match = 502, Not_Match = 154,Not_Available=0), rows = 16, keep = FALSE,size = .2,colors = c("lawngreen","pink",'grey'),
+  p6 <- waffle(c(Match = 502, Not_Match = 154,Not_Available=0), rows = 16, keep = FALSE,size = .2,colors = c("blue","red",'grey'),
   legend_pos = c(16,16))
 #M-ISO
-  p7 <- waffle(c(Match = 634, Not_Match = 22,Not_Available=0), rows = 16, keep = FALSE,size = .2,colors = c("lawngreen","pink",'grey'),
+  p7 <- waffle(c(Match = 634, Not_Match = 22,Not_Available=0), rows = 16, keep = FALSE,size = .2,colors = c("blue","red",'grey'),
   legend_pos = c(16,16))
 #M-PYR
-  p8 <- waffle(c(Match = 578, Not_Match = 74,Not_Available=4), rows = 16, keep = FALSE,size = .2,colors = c("lawngreen","pink",'grey'),
+  p8 <- waffle(c(Match = 578, Not_Match = 74,Not_Available=4), rows = 16, keep = FALSE,size = .2,colors = c("blue","red",'grey'),
   legend_pos = c(16,16))
 
   col1 <- arrangeGrob(p2, p3, p4,p1, top="Ariba",ncol=1)
@@ -74,7 +74,7 @@ grid_plot <- function(){
   col3 <- textGrob(x = 0.5, y = 0.48, paste("Ethambutol\n\n\n\n\n", "Isoniazid\n\n\n\n",
         "\nPyrazinamide\n\n\n\n\n", "Rifampicin"),gp=gpar(fontsize=9,font=8))
   legd <- legendGrob(c("Match with phenotype", "Not match with phenotype", "Not Available"), pch=22,
-   nrow=1, byrow=TRUE, gp=gpar(col = c("lawngreen","pink",'grey'), fill = c("lawngreen","pink",'grey')))
+   nrow=1, byrow=TRUE, gp=gpar(col = c("blue","red",'grey'), fill = c("blue","red",'grey')))
   grid.arrange(col1,col3,col2, legd, widths=c(1,0.2,1), heights=c(4,0.5),top = "Accuracy Comparison",
              layout_matrix=rbind(c(1,2,3), c(4,4,4)))
 }
@@ -82,7 +82,7 @@ grid_plot <- function(){
 
 sorted_grid <- function() {
     t=read.csv('match_plot_sort_mycrobe.txt',sep='\t')
- colors <- colorRampPalette(c("lawngreen", "grey", "pink"))(3)
+ colors <- colorRampPalette(c("blue", "grey", "red"))(3)
  ggplot(t[1:5248,], aes(column, row, fill = match_not)) + 
   geom_tile(colour = "white") + 
   facet_grid(drug~method)  +theme_minimal()+

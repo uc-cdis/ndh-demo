@@ -1,17 +1,11 @@
-# install.packages("devtools") # we need this to install github packages
-# options(unzip = "unzip") # the default is "", we need to to set this option to unzip for installations
-# ## Install igraph from github
-# devtools::install_github("gaborcsardi/pkgconfig")
-# devtools::install_github("igraph/rigraph")
-# devtools::install_github("kassambara/ggpubr")
-## Now I can install phyloseq
-load.lib<-c("httr","jsonlite","xml2","repr","utils","ggplot2","reshape2","igraph","phyloseq","ggpubr")
-# install.lib<-load.lib[!load.lib %in% installed.packages()]
-# for(lib in install.lib) install.packages(lib,dependencies=TRUE, lib=NULL)
-# load.s3<-c("phyloseq")
-# install.s3<-load.s3[!load.s3 %in% installed.packages()]
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+load.lib<-c("httr","jsonlite","dplyr","xml2","repr","utils","ggplot2","reshape2","ggpubr","phyloseq")
+install.lib<-load.lib[!load.lib %in% installed.packages()]
+for(lib in install.lib) BiocManager::install(lib)
+install.lib<-load.lib[!load.lib %in% installed.packages()]
+for(lib in install.lib) install.packages(lib,dependencies=TRUE)
 sapply(load.lib,require,character=TRUE)
-# sapply(load.s3,require,character=TRUE)
 
 options(warn=-1)
 #Create access key from credential file download from profile
@@ -19,13 +13,13 @@ add_keys <- function(filename){
     json_data <- readChar(filename, file.info(filename)$size)
     keys <- fromJSON(json_data)
     variable <- jsonlite::toJSON(list(api_key = keys$api_key), auto_unbox = TRUE)
-    auth <- POST('https://niaid.bionimbus.org/user/credentials/cdis/access_token', add_headers("Content-Type" = "application/json"), body = variable)
+    auth <- POST('https://microbiome.niaiddata.org/user/credentials/cdis/access_token', add_headers("Content-Type" = "application/json"), body = variable)
     return(auth)
 }
 
-query_microbiome_info <-function(study_id,offset){
+query_microbiome_info <-function(study_id,offset=0){
     query_txt = paste('{
-  study(submitter_id:"',study_id,'",project_id: "ndh-dait-microbiome"){
+  study(submitter_id:"',study_id,'",project_id:"DAIT-microbiome"){
     follow_ups(first:1,offset:',offset,'){
         visit_name
         subjects{
@@ -51,7 +45,7 @@ query_microbiome_info <-function(study_id,offset){
 
 query_subject_counts <-function(study_id){
     query_txt = paste('{
-        study(submitter_id:"',study_id,'", project_id:"ndh-dait-microbiome"){
+        study(submitter_id:"',study_id,'",project_id:"DAIT-microbiome"){
             _follow_ups_count
             }
         }',sep="")
@@ -64,7 +58,7 @@ query_api <- function(query_txt){
     query_txt = query_txt
     query <- jsonlite::toJSON(list(query = query_txt), auto_unbox = TRUE)
     token <- paste('bearer', content(auth)$access_token, sep=" ")
-    response <- POST('https://niaid.bionimbus.org/api/v0/submission/graphql',add_headers("Authorization" = token, "Content-Type" = "application/json"), body = query)
+    response <- POST('https://microbiome.niaiddata.org/api/v0/submission/graphql',add_headers("Authorization" = token, "Content-Type" = "application/json"), body = query)
     return(content(response)$data)
 }
 
@@ -72,7 +66,6 @@ query_api <- function(query_txt){
 parse_microbiome_info <- function(study_id){
     count_query = query_subject_counts(study_id)
     counts_response = query_api(count_query)
-    print(counts_response)
     counts = counts_response$study[[1]]$`_follow_ups_count`
     offset = 0
     int_data = data.frame(subject = character(), samples=character(), visit_name=character(), organ=character(), days=numeric(), uuid=character(),file_name=character())
@@ -82,7 +75,7 @@ parse_microbiome_info <- function(study_id){
         data = response$study[[1]]
         app_data = parse_microbiome_data(data)
         int_data = rbind(int_data, app_data)
-        offset = offset + 1
+        offset = offset + 10
     }
     write.table(int_data,paste(study_id,"microbiome_info.txt", sep="_"),sep="\t", col.names=T, row.names=F, quote=F)
     return (int_data)
@@ -90,17 +83,17 @@ parse_microbiome_info <- function(study_id){
 
 parse_microbiome_data <- function(data){
     app_data = data.frame(subject=character(), samples=character(), visit_name=character(), organ=character(), days=numeric(), uuid=character(),file_name=character() )
-    for (follow_up in data$follow_ups){
-        visit_name = follow_up$visit_name
+    for (visit in data$follow_ups){
+        visit_name = visit$visit_name
         if(length(visit_name) >0){
             visit_name = visit_name
         }else{
             visit_name = "NA"
         }
-        for (subject in follow_up$subjects){
+        for (subject in visit$subjects){
             subject_id = subject$submitter_id
         }
-        for (sample in follow_up$samples){
+        for (sample in visit$samples){
             sample_id = sample$submitter_id
             for (aliquot in sample$aliquots){
                 for (experiment in aliquot$experiments){
@@ -135,7 +128,7 @@ download_data <- function(study_id){
         auth = add_keys("credentials.json")
         token <- paste('bearer', content(auth)$access_token, sep=" ")
         for (i in 1:length(download_matrix$uuid)){
-            response <- GET(paste('https://niaid.bionimbus.org/user/data/download/',download_matrix$uuid[i],sep=""),add_headers("Authorization" = token))
+            response <- GET(paste('https://microbiome.niaiddata.org/user/data/download/',download_matrix$uuid[i],sep=""),add_headers("Authorization" = token))
             response_file <- GET(content(response)$url,write_disk(file.path(paste(study_id,download_matrix$file_name[i],sep="/")),overwrite=TRUE))
         }
         files = list.files(study_id)
@@ -256,13 +249,14 @@ beta_diversity_onesub <- function(study_id,subject){
     pc_euc_sub <- cmdscale(EuclDistMatrix_sub,k=4)
     write.table(pc_euc_sub,"pc_euc_sub.txt",sep="\t",quote=F, col.names=T, row.names=T)
     pc_euc_sub <- read.table("pc_euc_sub.txt",header=T, row.names=1)
-    names(pc_euc_sub) <- c("PC1","PC2","PC3","PC4")
+    names(pc_euc_sub) <- c("PCoA1","PCoA2","PCoA3","PCoA4")
     pc_sample_sub <- sample_data(physeq_sub)
     pc_sample_sub <- cbind(pc_euc_sub,pc_sample_sub)
+    pc_sample_sub$organ <- as.factor(pc_sample_sub$organ)
     par(mar=c(3,3,3,3))
-    p <- ggplot(pc_sample_sub, aes(PC1,PC2))
+    p <- ggplot(pc_sample_sub, aes(PCoA1,PCoA2))
     p + geom_point(size = 2, alpha = 0.3)
-    p + geom_point(aes(colour = factor(organ)),size=2)
+    p + geom_point(aes(colour = organ),size=2)
 }
 
 beta_diversity_organ <- function(study_id,organ,subjects){
