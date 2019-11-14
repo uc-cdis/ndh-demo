@@ -20,7 +20,7 @@ add_keys <- function(filename){
 query_microbiome_info <-function(study_id,offset=0){
     query_txt = paste('{
   study(submitter_id:"',study_id,'",project_id:"DAIT-microbiome"){
-    follow_ups(first:1,offset:',offset,'){
+    follow_ups(first:10,offset:',offset,'){
         visit_name
         subjects{
             submitter_id
@@ -54,7 +54,7 @@ query_subject_counts <-function(study_id){
 
 # Query API
 query_api <- function(query_txt){
-    auth = add_keys("credentials.json")
+    auth = add_keys("/home/jovyan/pd/credentials.json")
     query_txt = query_txt
     query <- jsonlite::toJSON(list(query = query_txt), auto_unbox = TRUE)
     token <- paste('bearer', content(auth)$access_token, sep=" ")
@@ -77,7 +77,12 @@ parse_microbiome_info <- function(study_id){
         int_data = rbind(int_data, app_data)
         offset = offset + 10
     }
-    write.table(int_data,paste(study_id,"microbiome_info.txt", sep="_"),sep="\t", col.names=T, row.names=F, quote=F)
+    output_dir = "/home/jovyan/pd/nb_output/daid"
+    if(!dir.exists(file.path(output_dir))){
+        dir.create(file.path(output_dir))
+    }
+    file_name = paste(study_id,"microbiome_info.txt",sep = "_")
+    write.table(int_data,paste(output_dir,file_name,sep="/"), col.names=T, row.names=F, quote=F,sep="\t")
     return (int_data)
 }
 
@@ -121,35 +126,41 @@ parse_microbiome_data <- function(data){
 
 # Download files if the files are not exist
 download_data <- function(study_id){
-    if(!dir.exists(file.path(study_id))){
-        dir.create(file.path(study_id))
+    output_dir = "/home/jovyan/pd/nb_output/daid"
+    download_dir = paste0("/home/jovyan/pd/nb_output/daid/", study_id)
+    if(!dir.exists(file.path(download_dir))){
+        dir.create(file.path(download_dir))
         metadata = parse_microbiome_info(study_id)
         download_matrix = unique(data.frame(uuid=metadata$uuid,file_name=metadata$file_name))
-        auth = add_keys("credentials.json")
+        auth = add_keys("/home/jovyan/pd/credentials.json")
         token <- paste('bearer', content(auth)$access_token, sep=" ")
         for (i in 1:length(download_matrix$uuid)){
             response <- GET(paste('https://microbiome.niaiddata.org/user/data/download/',download_matrix$uuid[i],sep=""),add_headers("Authorization" = token))
-            response_file <- GET(content(response)$url,write_disk(file.path(paste(study_id,download_matrix$file_name[i],sep="/")),overwrite=TRUE))
+            response_file <- GET(content(response)$url,write_disk(file.path(paste(download_dir,download_matrix$file_name[i],sep="/")),overwrite=TRUE))
         }
-        files = list.files(study_id)
-        comb_file = read.table(paste(study_id,files[1],sep="/"),sep="\t",header=T,row.names=1)
+        files = list.files(download_dir)
+        comb_file = read.table(paste(download_dir,files[1],sep="/"),sep="\t",header=T,row.names=1)
         if(length(files) >1){
             for(i in 2:length(files)){
-                data = read.table(paste(study_id,files[i],sep="/"),sep="\t",header=T, row.names=1)
+                data = read.table(paste(download_dir,files[i],sep="/"),sep="\t",header=T, row.names=1)
                 comb_file = cbind(comb_file,data)
             }
             names(comb_file) = metadata$samples
         }
-        write.table(comb_file,paste(study_id,"microbiome_data.txt",sep="_"),col.names=T,row.names=T,quote=T,sep="\t")
+        output_file = paste(study_id,"microbiome_data.txt",sep="_")
+        write.table(comb_file,paste(output_dir,output_file,sep="/"),col.names=T,row.names=T,quote=T,sep="\t")
         return("Finished Downloading")
     }else{return("Data Already Exist")}
 }
 
 # Construct physeq S4 object
 construct_physeq <-function(study_id){
-    otumat = read.table(paste(study_id,"microbiome_data.txt",sep="_"),sep="\t",header=T,row.names=1)
+    output_file = paste(study_id,"microbiome_data.txt",sep="_")
+    output_dir = "/home/jovyan/pd/nb_output/daid"
+    otumat = read.table(paste(output_dir,output_file,sep="/"),header=T,row.names=1)
     otumat = otumat[rowSums(otumat)!=0,]
-    samplemat = read.table(paste(study_id,"microbiome_info.txt", sep="_"), header=T, row.names=2, stringsAsFactors=F,sep="\t")
+    info_file = paste(study_id,"microbiome_info.txt",sep="_")
+    samplemat = read.table(paste(output_dir,info_file,sep="/"), header=T, row.names=2, stringsAsFactors=F,sep="\t")
     samplemat = samplemat[order(match(rownames(samplemat),names(otumat))),]
     OTU = otu_table(otumat,taxa_are_rows = TRUE)
     Sample = sample_data(samplemat)
