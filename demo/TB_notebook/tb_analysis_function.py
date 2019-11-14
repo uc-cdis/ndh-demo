@@ -21,7 +21,7 @@ res2Drug={"Ethambutol":'conferring resistance to ethambutol',"Isoniazid":'confer
 #res2Drug={"ethambutol":'ethambutol',"isoniazid":'isoniazid',"pyrazinamide":'pyrazinamide',"rifampicin":'rifampicin'}
 # Set up Gen3 SDK
 endpoint = "https://tb.niaiddata.org/"
-auth = Gen3Auth(endpoint, refresh_file = "credentials.json")
+auth = Gen3Auth(endpoint, refresh_file = "/home/jovyan/pd/credentials.json")
 sub = Gen3Submission(endpoint, auth)
 file = Gen3File(endpoint, auth)
 
@@ -60,7 +60,10 @@ def parse_json(object_dict,chunk):
         submitter_id = object_dict['data_subject_{0}_submitter_id'.format(i)]
         subjects_info.setdefault(submitter_id,[])
         fastq_submitter_id = object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_0_submitter_id'.format(i)]
-        filename = 'Fastq_files/' + object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_0_file_name'.format(i)]
+        fastq_dir = "/home/jovyan/pd/nb_output/tb/fastq_files"
+        if not os.path.exists(fastq_dir):
+            os.makedirs(fastq_dir)
+        filename = fastq_dir + '/' + object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_0_file_name'.format(i)]
         object_id = object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_0_object_id'.format(i)]
         print(object_id)
         print(file.get_presigned_url(object_id,protocol="s3"))
@@ -73,7 +76,7 @@ def parse_json(object_dict,chunk):
         print("************")
         subjects_info[submitter_id].append(filename.split("/")[1])
         subjects_info[submitter_id].append(object_id)
-        filename = 'Fastq_files/' + object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_1_file_name'.format(i)]
+        filename = fastq_dir + '/' + object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_1_file_name'.format(i)]
         object_id = object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_1_object_id'.format(i)]
         url = file.get_presigned_url(object_id,protocol="s3")['url']
         if not os.path.isfile(filename):
@@ -106,11 +109,12 @@ def runAriba(df):
     for index, row in df.iterrows():
         file1 = "Fastq_files/" + row['fastq1']
         file2 = "Fastq_files/" + row['fastq2']
-        output = "Ariba/output/" + index + ".out"
+        ariba_output_dir = 'home/jovyan/pd/nb_output/tb/ariba/output'
+        output = ariba_output_dir + "/" + index + ".out"
         print("Processing {}".format(index))
         start = time.time()
         # run ariba command
-        subprocess.run(["ariba","run","Ariba/prepareref.out",file1, file2, output])
+        subprocess.run(["ariba","run","home/jovyan/pd/nb_output/tb/ariba/prepareref.out",file1, file2, output])
         end = time.time()
         print("It takes %s sec to complete"%(round(end-start,2)))
         print("****************\n")
@@ -119,7 +123,7 @@ def extract_ariba_predict(dir):
     preds = dict()
     subfolders = [f.path for f in os.scandir(dir) if f.is_dir()]  
    # subfolders.remove("Ariba/output/.ipynb_checkpoints")
-    cmd = "ariba summary Ariba/out.summary"
+    cmd = "ariba summary home/jovyan/pd/nb_output/tb/ariba/out.summary"
     # append file end with report.tsv
     for p in subfolders:
         for file in os.listdir(p):
@@ -138,7 +142,7 @@ def extract_ariba_predict(dir):
             os.rename(file,dst)
             file = p + "/" +subject + ".report.tsv" 
         # extract prediction result from each report.tsv and out.summary.csv
-        pred = get_prediction_singleSRA(file,"Ariba/out.summary.csv")
+        pred = get_prediction_singleSRA(file,"ariba/out.summary.csv")
         md5sum = md5(file)
         st = os.stat(file)
         pred["md5"] = md5sum
