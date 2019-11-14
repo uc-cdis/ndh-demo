@@ -87,10 +87,11 @@ def add_keys(filename):
     json_data = open(filename).read()
     keys = json.loads(json_data)
     auth = requests.post('https://aids.niaiddata.org/user/credentials/cdis/access_token', json=keys) 
+    return auth
 
 def query_api(query_txt, variables=None):
     ''' Request results for a specific query '''
-
+    auth = add_keys("/home/jovyan/pd/credentials.json")
     if variables == None:
         query = {'query': query_txt}
     else:
@@ -223,8 +224,10 @@ def plot_overall_metrics(summary_counts, field, totals):
     
 def compare_lab_results(project_id, variable, tag=None):
     ''' Compare any lab result variable after seropositive conversion'''
-        
-    filename = '%s.json' % variable
+    output_dir = "/home/jovyan/pd/nb_output/aids"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    filename = output_dir + "/" +'%s.json' % variable
     if os.path.isfile(filename):
         json_data=open(filename).read()
         values = json.loads(json_data)
@@ -299,11 +302,13 @@ def compare_lab_results(project_id, variable, tag=None):
 
 def compare_survival(project_id, study_id, variable, tag=None):
     ''' Compare survival with haart vs not ehaart'''
-    
+    output_dir = "/home/jovyan/pd/nb_output/aids"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     if study_id:
-        filename = '%s_%s_survival.json' % (variable,study_id)
+        filename = output_dir + "/" + '%s_%s_survival.json' % (variable,study_id)
     else:
-        filename = '%s_survival.json' % (variable)
+        filename = output_dir + "/" + '%s_survival.json' % (variable)
     
     if os.path.isfile(filename):
         json_data=open(filename).read()
@@ -394,8 +399,10 @@ def compare_survival(project_id, study_id, variable, tag=None):
     
 def compare_after_haart(project_id, variable, tag=None):
     ''' Compare any lab result variable after seropositive conversion'''
-    
-    filename = '%s_haart.json' % variable
+    output_dir = "/home/jovyan/pd/nb_output/aids"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    filename = output_dor + "/" '%s_haart.json' % variable
     if os.path.isfile(filename):
         json_data=open(filename).read()
         values = json.loads(json_data)
