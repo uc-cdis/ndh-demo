@@ -10,6 +10,9 @@ for(s3 in install.s3) BiocManager::install(s3)
 sapply(load.lib,require,character=TRUE)
 sapply(load.s3,require,character=TRUE)
 
+options(warn=-1)
+output_dir = "/home/jovyan/pd/nb_output/dmid"
+
 # Input "credential.json" downloaded from data common profile page to generate access token for data query
 add_keys <- function(filename){
     json_data <- readChar(filename, file.info(filename)$size)
@@ -45,7 +48,7 @@ query_cell_file <- function(study_id,aliquot_type,file_type){
 
 # query data from API using the query text created by create_query_txt function. The content of the response is stored in an array
 query_api <- function(query_txt){
-    auth = add_keys("credentials.json")
+    auth = add_keys("/home/jovyan/pd/credentials.json")
     query_txt = query_txt
     query <- jsonlite::toJSON(list(query = query_txt), auto_unbox = TRUE)
     token <- paste('bearer', content(auth)$access_token, sep=" ")
@@ -108,16 +111,17 @@ parse_cell_file<- function(study_id,aliquot_type,file_type){
 
 # Verify if a file has been download already.  Create folder if it hasn't and proceed to download the file.  Store the files under the folder.
 download_data <- function(study_id,aliquot_type,file_type){
-    if(!dir.exists(file.path(paste(study_id,file_type,sep="_")))){
-        dir.create(file.path(paste(study_id,file_type,sep="_")))
+    if(!dir.exists(file.path(paste(output_dir,paste(study_id,file_type,sep="_"),sep="/")))){
+        dir.create(file.path(paste(output_dir,paste(study_id,file_type,sep="_"),sep="/")),recursive=TRUE)
         metadata = parse_cell_file(study_id,aliquot_type,file_type)
         download_matrix = unique(data.frame(object_id=metadata$object_id,file_name=metadata$FileName))
-        auth = add_keys("credentials.json")
+        auth = add_keys("/home/jovyan/pd/credentials.json")
         token <- paste('bearer', content(auth)$access_token, sep=" ")
         # Download file from aws s3 or ftp_url
         for(i in 1:length(download_matrix$object_id)){
-               response <- GET(paste('https://flu.niaiddata.org/user/data/download/',download_matrix$object_id[i],sep=""),add_headers("Authorization" = token))
-response_file <- GET(content(response)$url,write_disk(file.path(paste(paste(study_id,file_type,sep="_"),download_matrix$file_name[i],sep="/")),overwrite=TRUE))
+            response <- GET(paste('https://flu.niaiddata.org/user/data/download/',download_matrix$object_id[i],sep=""),add_headers("Authorization" = token))
+            print(download_matrix$object_id[i])
+response_file <- GET(content(response)$url,write_disk(file.path(paste(paste(output_dir,paste(study_id,file_type,sep="_"),sep="/"),download_matrix$file_name[i],sep="/")),overwrite=TRUE))
            }
         return("Finished Downloading")
     }else{return("Data Already Exist")}
@@ -125,8 +129,9 @@ response_file <- GET(content(response)$url,write_disk(file.path(paste(paste(stud
 
 # Use function parse_cell_file to create design matrix. Use design matrix and downloaded files as input to create the aggregated normalized gene expression data frame
 array_normalization <- function(study_id){
+    output_dir = "/home/jovyan/pd/nb_output/dmid"
     # Load arrays
-    array_Dir <- paste(study_id,"mrna_microarrays",sep="_")
+    array_Dir <- paste(output_dir,paste(study_id,"mrna_microarrays",sep="_"),sep="/")
     meta = parse_cell_file(study_id,"RNA","mrna_microarrays")
     meta$SampleName = sub(".txt","",meta$FileName)
     meta$uuid <- NULL
@@ -189,7 +194,7 @@ DE_gene <-function(study_id,virus,exclude_time_points=NULL){
     fit2 <- eBayes(fit2)
     DE_gene = topTable(fit2,n=Inf,adjust="BH")
     virus_string = paste(virus,collapse = "vs")
-    write.table(DE_gene,file = paste(study_id,virus_string,"DE.txt",sep="."),quote=F,sep="\t",col.names=T,row.names=T)
+    write.table(DE_gene,file = paste(output_dir,paste(study_id,virus_string,"DE.txt",sep="."),sep="/"),quote=F,sep="\t",col.names=T,row.names=T)
     return(DE_gene)
 }
 
@@ -197,16 +202,16 @@ DE_gene <-function(study_id,virus,exclude_time_points=NULL){
 Select_ISG <- function(ISG,dataset){
     ISG_gene = read.table(ISG)
     ISG_gene = ISG_gene$V1
-    DE_gene = read.table(dataset,header=T,row.names=1)
+    DE_gene = read.table(paste(output_dir,dataset,sep="/"),header=T,row.names=1)
     ISG_DE = DE_gene[rownames(DE_gene)%in%ISG_gene,]
     ISG_DE_order = ISG_DE[order(rev(ISG_DE)[5],decreasing = FALSE),]
-    write.table(ISG_DE_order,paste(gsub(".txt","",dataset),"ISG.txt",sep="."),sep="\t",quote=F,col.names=T,row.names=T)
+    write.table(ISG_DE_order,paste(output_dir,paste(gsub(".txt","",dataset),"ISG.txt",sep="."),sep="/"),sep="\t",quote=F,col.names=T,row.names=T)
 }
 
 # Plot heatmap for each individual study ISG genes.
 headmap_plot <- function(dataset){
     par(cex.main=0.4)
-    ISG_DE = read.table(dataset,header=T,row.names=1)
+    ISG_DE = read.table(paste(output_dir,dataset,sep="/"),header=T,row.names=1)
     ISG_DE = subset(ISG_DE,select = -c(AveExpr,F,P.Value,adj.P.Val))
     ISG_DE_matrix = data.matrix(ISG_DE)
     my_palette <- colorRampPalette(c("green", "black", "red"))
@@ -219,23 +224,23 @@ common_ISG <- function(ISG,datasets){
     ISG_gene = read.table(ISG)
     ISG_gene = ISG_gene$V1
     for (i in 1:length(datasets)){
-        DE_gene = read.table(datasets[i],header=T,row.names=1)
+        DE_gene = read.table(paste(output_dir,datasets[i],sep="/"),header=T,row.names=1)
         ISG_DE = rownames(DE_gene[rownames(DE_gene)%in%ISG_gene,])
         ISG_gene = ISG_gene[ISG_gene%in%ISG_DE]
     }
     for (i in 1:length(datasets)){
-        DE_gene = read.table(datasets[i],header=T,row.names=1)
+        DE_gene = read.table(paste(output_dir,datasets[i],sep="/"),header=T,row.names=1)
         ISG_DE = DE_gene[rownames(DE_gene)%in%ISG_gene,]
         ISG_DE_order = ISG_DE[order(rev(ISG_DE)[5],decreasing = FALSE),]
-        write.table(ISG_DE_order,paste(gsub(".txt","",datasets[i]),"ISG_common.txt",sep="."),sep="\t",quote=F,col.names=T,row.names=T)
+        write.table(ISG_DE_order,paste(output_dir,paste(gsub(".txt","",datasets[i]),"ISG_common.txt",sep="."),sep="/"),sep="\t",quote=F,col.names=T,row.names=T)
     }
     return(ISG_gene)
 }
 
 # Rank ISG signatures. All the signatures were catagorized into three groups: commonly down-regulated in dataset1 and dataset2, down-regulated in dataset1 only and the rest group. Within each group, genes are ranked from smallest to largest at the last timepoint in dataset1.
 order_ISG <- function(dataset1,dataset2){
-    ISG_DE1 = read.table(dataset1,header=T,row.names=1)
-    ISG_DE2 = read.table(dataset2,header=T,row.names=1)
+    ISG_DE1 = read.table(paste(output_dir,dataset1,sep="/"),header=T,row.names=1)
+    ISG_DE2 = read.table(paste(output_dir,dataset2,sep="/"),header=T,row.names=1)
     ISG_DE1_down = rownames(ISG_DE1[rev(ISG_DE1)[5]< 0,])
     ISG_DE2_down = rownames(ISG_DE2[rev(ISG_DE2)[5]< 0,])
     common_down = ISG_DE1_down[ISG_DE1_down%in%ISG_DE2_down]
@@ -252,7 +257,7 @@ heatmap_plot_across <- function(datasets,dataset1,dataset2){
     gene_list = order_ISG(dataset1,dataset2)
     par(cex.main=0.4)
     for (i in 1:length(datasets)){
-        ISG_DE = read.table(datasets[i],header=T,row.names=1)
+        ISG_DE = read.table(paste(output_dir,datasets[i],sep="/"),header=T,row.names=1)
         ISG_DE_order = ISG_DE[match(gene_list,rownames(ISG_DE)),]
         ISG_DE_order = subset(ISG_DE_order,select = -c(AveExpr,F,P.Value,adj.P.Val))
         ISG_DE_matrix = data.matrix(ISG_DE_order)
@@ -265,14 +270,14 @@ heatmap_plot_across <- function(datasets,dataset1,dataset2){
 # Plot heatmap for single study. The ISG signature are ordered by function order_ISG. The plot is saved in .png format with high resolution
 heatmap_plot_single <- function(dataset, dataset1,dataset2){
     gene_list = order_ISG(dataset1,dataset2)
-    ISG_DE = read.table(dataset,header=T,row.names=1)
+    ISG_DE = read.table(paste(output_dir,dataset,sep="/"),header=T,row.names=1)
     ISG_DE_order = ISG_DE[match(gene_list,rownames(ISG_DE)),]
     ISG_DE_order = subset(ISG_DE_order,select = -c(AveExpr,F,P.Value,adj.P.Val))
     ISG_DE_matrix = data.matrix(ISG_DE_order)
     my_palette <- colorRampPalette(c("green", "black", "red"))
     col_breaks = c(seq(-3,-0.75,length=10),seq(-0.74,0.74,length=10),seq(0.75,3,length=10))
     par(mar=c(1,1,1,1))
-    png(paste(gsub(".txt","",dataset),"png",sep="."),height=1080,width=1080,res=100)
+    png(paste(output_dir,paste(gsub(".txt","",dataset),"png",sep="."),sep="/"),height=1080,width=1080,res=100)
     heatmap.2(ISG_DE_matrix,density.info="none",trace="none",col=my_palette,Colv="NA",breaks=col_breaks,dendrogram="none",Rowv="NA",labRow=FALSE, colRow = FALSE)
 }
 
@@ -285,7 +290,7 @@ protein_DE_test <- function(study_id,time=-1){
     timepoints = timepoints[timepoints!=time]
     filename = unique(metadata$FileName)
     # Read normalized protein quantity
-    protein_expression = read.table(paste(paste(study_id,"protein_expressions",sep="_"),filename,sep="/"),sep="\t",header=T)
+    protein_expression = read.table(paste(output_dir,paste(paste(study_id,"protein_expressions",sep="_"),filename,sep="/"),sep="/"),sep="\t",header=T)
     # Initialize list to store pvalue for t-test, expression change direction for t-test, pvalue for G-test and expression change direction for G-test for different timepoints and virus infections. Initialize vector to store protein symbols
     tstatlist = list()
     tfoldlist = list()
@@ -360,10 +365,10 @@ protein_DE_test <- function(study_id,time=-1){
     row.names(tfold_matrix) = protein_expression[,2]
     row.names(gstat_matrix) = protein_expression[,2]
     row.names(gfold_matrix) = protein_expression[,2]
-    write.table(tfold_matrix,paste(study_id,"protein","Tfolds",sep="_"),sep="\t",quote=F,col.names=T,row.names=T)
-    write.table(tstat_matrix,paste(study_id,"protein","Ttest",sep="_"),sep="\t",quote=F,col.names=T,row.names=T)
-                                 write.table(gfold_matrix,paste(study_id,"protein","Gfolds",sep="_"),sep="\t",quote=F,col.names=T,row.names=T)
-                                 write.table(gstat_matrix,paste(study_id,"protein","Gtest",sep="_"),sep="\t",quote=F,col.names=T,row.names=T)
+    write.table(tfold_matrix,paste(output_dir,paste(study_id,"protein","Tfolds",sep="_"),sep="/"),sep="\t",quote=F,col.names=T,row.names=T)
+    write.table(tstat_matrix,paste(output_dir,paste(study_id,"protein","Ttest",sep="_"),sep="/"),sep="\t",quote=F,col.names=T,row.names=T)
+    write.table(gfold_matrix,paste(output_dir,paste(study_id,"protein","Gfolds",sep="_"),sep="/"),sep="\t",quote=F,col.names=T,row.names=T)
+    write.table(gstat_matrix,paste(output_dir,paste(study_id,"protein","Gtest",sep="_"),sep="/"),sep="\t",quote=F,col.names=T,row.names=T)
     # Select up-regulated proteins tested by T-test or G-test
     tsignificant_up = tfold_matrix[apply(tfold_matrix,MARGIN=1,function(x) 1%in%x),]
     gsignificant_up = gfold_matrix[apply(gfold_matrix,MARGIN=1,function(x) 1%in%x),]
@@ -375,9 +380,9 @@ protein_DE_test <- function(study_id,time=-1){
 
 # Upregulated proteins and ISG among the upregulated proteins were plotted using Veen Diagram.
 ISG_DE_protein <- function(study_id,signature){
-    tfold_matrix = read.table(paste(study_id,"protein","Tfolds",sep="_"),sep="\t",header=T,row.names=1)
+    tfold_matrix = read.table(paste(output_dir,paste(study_id,"protein","Tfolds",sep="_"),sep="/"),sep="\t",header=T,row.names=1)
     tsignificant_up = tfold_matrix[apply(tfold_matrix,MARGIN=1,function(x) 1%in%x),]
-    gfold_matrix = read.table(paste(study_id,"protein","Gfolds",sep="_"),sep="\t",header=T,row.names=1)
+    gfold_matrix = read.table(paste(output_dir,paste(study_id,"protein","Gfolds",sep="_"),sep="/"),sep="\t",header=T,row.names=1)
     gsignificant_up = gfold_matrix[apply(gfold_matrix,MARGIN=1,function(x) 1%in%x),]
     up_genes = c(gsub("_HUMAN","",row.names(tsignificant_up)),gsub("_HUMAN","",row.names(gsignificant_up)))
     print(length(up_genes))
