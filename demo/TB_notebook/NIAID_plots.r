@@ -81,10 +81,10 @@ grid_plot <- function(){
 
 
 sorted_grid <- function() {
-    t=read.csv('match_plot_sort_mycrobe.txt',sep='\t')
+    t=read.csv('match_plot_sort_mykrobe.txt',sep='\t')
  colors <- colorRampPalette(c("blue", "grey", "red"))(3)
- ggplot(t[1:5248,], aes(column, row, fill = match_not)) + 
-  geom_tile(colour = "white") + 
+ ggplot(t[1:5248,], aes(column, row, fill = match_not)) +
+  geom_tile(colour = "white") +
   facet_grid(drug~method)  +theme_minimal()+
   labs(x="", y="") + ggtitle("Side by Side Comparison")+
   theme(plot.title = element_text(hjust = 0.5))+

@@ -13,7 +13,7 @@ Steps to run mounted Notebook in NIAID Data ecosystem.
 6. Double click to open the notebook. From the navigation bar on the top left, click Run and then select Run All Cells to execute the notebook.
 
 
-Jupyter Notebook- DMID (Lab Edition)
+Jupyter Notebook- DMID (Lab Edition) overview:
 
 Under DMID-notebook folder, there are "LHV_demo.ipynb" python notebook and its dependent library "ndh_analysis_functions_dmid.py", and "DMID-LHV-R.ipynb" R notebook and its dependent library "ndh_analysis_function_dmid.r" with a list of inteferon pathway genes "CalU3_TypeI_ISG.txt"
 

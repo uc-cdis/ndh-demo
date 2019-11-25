@@ -235,9 +235,10 @@ box_plot_markers<-function(plot_markers,records,record_names){
 #################################
 
 # Please specify the json file path export from HIV cohort selection App
-PTC_json<-"ptc-cohort-vload-500-months-18.json"
-LTNP_json<-"ltnp-cohort-CD4-500-years-5.json"
-EC_json<-"ec-cohort-suppressvload-50-spikevload-1000-visits-2.json"
+path_dir <- "/home/rstudio/pd/nb_output/immune"
+PTC_json<- paste(path_dir,"ptc-cohort-vload-500-months-18.json",sep="/")
+LTNP_json<-paste(path_dir,"ltnp-cohort-CD4-500-years-5.json",sep="/")
+EC_json<-paste(path_dir,"ec-cohort-suppressvload-50-spikevload-1000-visits-2.json",sep="/")
 
 # Specify data common end point, program, project, nodetype, immune_markers for data availability table and box plot.
 endpoint<-"https://aids.niaiddata.org"
@@ -255,7 +256,7 @@ plot_markers = list("il2","il4","il6","ifng","gp130","gmcsf","bca1","tnfa")
 #################################
 
 # Create sub instance for the submission Class defined in Gen3 R SDK to export or query data from data common
-auth <- Gen3AuthHelper(endpoint, refresh_file="credentials.json")
+auth <- Gen3AuthHelper(endpoint, refresh_file="/home/rstudio/pd/credentials.json")
 sub <- Gen3Submission(endpoint, auth)
 
 # Read json file to identify subjects for each category
