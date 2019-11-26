@@ -402,7 +402,7 @@ def compare_after_haart(project_id, variable, tag=None):
     output_dir = "/home/jovyan/pd/nb_output/aids"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    filename = output_dor + "/" '%s_haart.json' % variable
+    filename = output_dir + "/" '%s_haart.json' % variable
     if os.path.isfile(filename):
         json_data=open(filename).read()
         values = json.loads(json_data)
