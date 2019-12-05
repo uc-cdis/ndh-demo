@@ -10,7 +10,7 @@ Steps to run mounted R code in NIAID Data ecosystem RStudio.
 
 5. Upload your credential.json file under /home/rstudio/pd.
 
-6. Double click to open the RStudio. Create directory "/home/rstudio/pd/nb_output/immune". Upload json files download from NDH HIV Classifier App for Post Treatment Controller (PTC), Elite Controller (EC) or Long Term Non Progressor (LTNP) under "/home/rstudio/pd/nb_output/immune". Type setwd("/home/rstudio/inflammatory/") in console to set the working enviroment and run R code "immune_marker.R".
+6. Double click to open the RStudio. Create directory "/home/rstudio/pd/nb_output/immune". Upload json files download from NDH HIV Classifier App for Post Treatment Controller (PTC), Elite Controller (EC) or Long Term Non Progressor (LTNP) under "/home/rstudio/pd/nb_output/immune". Type setwd("/home/rstudio/inflammatory/") in console to set the working enviroment and run R code "immune_marker.r".
 
 
 R Studio (InflammatoryR) overview:
