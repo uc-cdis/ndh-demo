@@ -1,4 +1,4 @@
-Steps to run mounted Notebook in NIAID Data ecosystem.
+Steps to run mounted notebook in NIAID Data Ecosystem.
 
 1. Login in https://niaiddata.org/ using you user id and password.
 
@@ -14,8 +14,8 @@ Steps to run mounted Notebook in NIAID Data ecosystem.
 
 Jupyter Notebook-DAIT(Lab Edition) overview:
 
-Under DAIT-notebook folder, there are "DAIT_lipid_demo.ipynb" python notebook and its dependent library "ndh_analysis_functions.py", and "Microbiome.ipynb" R notebook and its dependent library "microbiome.R".
+Under DAIT-notebook folder, there are "nde_dait_pynb.ipynb" python notebook and its dependent library "nde_dait_function.py", and "nde_dait_rnb.ipynb" R notebook and its dependent library "nde_dait_function.R".
 
-"DAIT_lipid_demo.ipynb" query structure data from niaid data ecosystem aids enviroment and perform data analysis on data from HIV-CHARLIE and DAIT-immune_controls project. The analysis shows the total cholesterol and high density lipid cholesteroal level across age in female and male groups or in different races. The analysis shows the advantage of performing analysis across projects. Combining data from different projects enriched datasets so that the measured variable is normally distributed to represent the attributes from population.
+"nde_dait_pynb.ipynb" query structure data from niaid data ecosystem aids enviroment and perform data analysis on data from HIV-CHARLIE and DAIT-immune_controls project. The analysis shows the total cholesterol and high density lipid cholesteroal level across age in female and male groups or in different races. The analysis shows the advantage of performing analysis across projects. Combining data from different projects enriched datasets so that the measured variable is normally distributed to represent the attributes from population.
 
-"Microbiome.ipynb" query structure data and download object data from niaid data ecosystem microbiome enviroment and perform data analysis on data from DAIT-microbiome project. The analysis used phyloseq package to calculate alpha and beta diversity from the samples in different organ or samples from pregnant woman at different trimester to reveal the complexity of microbacterial in different organ or at different stages of pregnancy.
+"nde_dait_rnb.ipynb" query structure data and download object data from niaid data ecosystem microbiome enviroment and perform data analysis on data from DAIT-microbiome project. The analysis used phyloseq package to calculate alpha and beta diversity from the samples in different organ or samples from pregnant woman at different trimester to reveal the complexity of microbacterial in different organ or at different stages of pregnancy.
