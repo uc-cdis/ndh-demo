@@ -4,7 +4,6 @@ from gen3.file import Gen3File
 from sh import gunzip
 import time
 import subprocess
-import tb_analysis_function as ndh
 import flatten_json
 import warnings
 import os
@@ -24,6 +23,10 @@ endpoint = "https://tb.niaiddata.org/"
 auth = Gen3Auth(endpoint, refresh_file = "/home/jovyan/pd/credentials.json")
 sub = Gen3Submission(endpoint, auth)
 file = Gen3File(endpoint, auth)
+
+ariba_output_dir = '/home/jovyan/pd/nb_output/tb/ariba/output'
+if not os.path.exists(ariba_output_dir):
+            os.makedirs(ariba_output_dir)
 
 def query_file(project,chunk,offset,drug_resistant):
     # SDK submission class call peregrine to retrieve data, and convert json to flat json
@@ -65,8 +68,6 @@ def parse_json(object_dict,chunk):
             os.makedirs(fastq_dir)
         filename = fastq_dir + '/' + object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_0_file_name'.format(i)]
         object_id = object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_0_object_id'.format(i)]
-        print(object_id)
-        print(file.get_presigned_url(object_id,protocol="s3"))
         url = file.get_presigned_url(object_id,protocol="s3")['url']
         if not os.path.isfile(filename):
             print("Downloading %s"%(filename))
@@ -74,7 +75,7 @@ def parse_json(object_dict,chunk):
         else:
             print("%s Exist"%(filename))
         print("************")
-        subjects_info[submitter_id].append(filename.split("/")[1])
+        subjects_info[submitter_id].append(filename.split("/")[7])
         subjects_info[submitter_id].append(object_id)
         filename = fastq_dir + '/' + object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_1_file_name'.format(i)]
         object_id = object_dict['data_subject_{0}_samples_0_aliquots_0_read_groups_0_submitted_unaligned_reads_files_1_object_id'.format(i)]
@@ -85,10 +86,10 @@ def parse_json(object_dict,chunk):
         else:
             print("%s Exist"%(filename))
         print("************")
-        sample = filename.split("/")[1]
+        sample = filename.split("/")[7]
         sample = sample.split(".")[0]
         sample = sample.split("_")[0]
-        subjects_info[submitter_id].append(filename.split("/")[1])
+        subjects_info[submitter_id].append(filename.split("/")[7])
         subjects_info[submitter_id].append(object_id)
         subjects_info[submitter_id].append(sample)
         subjects_info[submitter_id].append(fastq_submitter_id)
@@ -107,31 +108,32 @@ def download_file(url,filename):
 def runAriba(df):
     # loop through each row
     for index, row in df.iterrows():
-        file1 = "Fastq_files/" + row['fastq1']
-        file2 = "Fastq_files/" + row['fastq2']
-        ariba_output_dir = 'home/jovyan/pd/nb_output/tb/ariba/output'
+        file1 = "/home/jovyan/pd/nb_output/tb/fastq_files/" + row['fastq1']
+        file2 = "/home/jovyan/pd/nb_output/tb/fastq_files/" + row['fastq2']
         output = ariba_output_dir + "/" + index + ".out"
         print("Processing {}".format(index))
         start = time.time()
         # run ariba command
-        subprocess.run(["ariba","run","home/jovyan/pd/nb_output/tb/ariba/prepareref.out",file1, file2, output])
+        subprocess.run(["ariba","run","/home/jovyan/pd/nb_output/tb/ariba/prepareref.out",file1, file2, output])
         end = time.time()
         print("It takes %s sec to complete"%(round(end-start,2)))
         print("****************\n")
 
 def extract_ariba_predict(dir):
     preds = dict()
-    subfolders = [f.path for f in os.scandir(dir) if f.is_dir()]  
-   # subfolders.remove("Ariba/output/.ipynb_checkpoints")
-    cmd = "ariba summary home/jovyan/pd/nb_output/tb/ariba/out.summary"
+    if os.path.isdir("/home/jovyan/pd/nb_output/tb/ariba/output/.ipynb_checkpoints"):
+        os.rmdir("/home/jovyan/pd/nb_output/tb/ariba/output/.ipynb_checkpoints")
+    subfolders = [f.path for f in os.scandir(dir) if f.is_dir()] 
+    cmd = "ariba summary /home/jovyan/pd/nb_output/tb/ariba/out.summary"
     # append file end with report.tsv
     for p in subfolders:
         for file in os.listdir(p):
             if "debug" not in file and file.endswith("report.tsv"):
                 cmd += " %s/%s"%(p,file)
     process = subprocess.Popen(cmd, shell=True)
+    time.sleep(30)
     for p in subfolders:
-        subject = p.split("/")[2]
+        subject = p.split("/")[8]
         subject = subject.split(".")[0]
         file = p + "/report.tsv"
         # define file path
@@ -142,7 +144,7 @@ def extract_ariba_predict(dir):
             os.rename(file,dst)
             file = p + "/" +subject + ".report.tsv" 
         # extract prediction result from each report.tsv and out.summary.csv
-        pred = get_prediction_singleSRA(file,"ariba/out.summary.csv")
+        pred = get_prediction_singleSRA(file,"/home/jovyan/pd/nb_output/tb/ariba/out.summary.csv")
         md5sum = md5(file)
         st = os.stat(file)
         pred["md5"] = md5sum
@@ -163,9 +165,9 @@ def md5(fname):
 def runMykrobe(df):
     # loop through each row
     for index, row in df.iterrows():
-        file1 = "Fastq_files/" + row['fastq1']
-        file2 = "Fastq_files/" + row['fastq2']
-        outfile = "mykrobeOut/" + index + ".out"
+        file1 = "/home/jovyan/pd/nb_output/tb/fastq_files/" + row['fastq1']
+        file2 = "/home/jovyan/pd/nb_output/tb/fastq_files/" + row['fastq2']
+        outfile = "/home/jovyan/pd/nb_output/tb/mykrobeOut" + index + ".out"
         if os.path.isfile(file1) and os.path.isfile(file2):
             print("Processing {}".format(index))
             start = time.time()
