@@ -1,4 +1,4 @@
-Steps to run mounted Notebook in NIAID Data ecosystem.
+Steps to run mounted notebook in NIAID Data Ecosystem.
 
 1. Login in https://niaiddata.org/ using you user id and password.
 
@@ -15,8 +15,8 @@ Steps to run mounted Notebook in NIAID Data ecosystem.
 
 Jupyter Notebook- DMID (Lab Edition) overview:
 
-Under DMID-notebook folder, there are "LHV_demo.ipynb" python notebook and its dependent library "ndh_analysis_functions_dmid.py", and "DMID-LHV-R.ipynb" R notebook and its dependent library "ndh_analysis_function_dmid.r" with a list of inteferon pathway genes "CalU3_TypeI_ISG.txt"
+Under DMID-notebook folder, there are "nde_dmid_pynb.ipynb" python notebook and its dependent library "nde_dmid_function.py", and "nde_dmid_rnb.ipynb" R notebook and its dependent library "nde_dmid_function.r" with a list of inteferon pathway genes "CalU3_TypeI_ISG.txt"
 
-"LHV_demo.ipynb" query structure data from niaid data ecosystem flu enviroment, and perform data analysis on data from FLU-LHV project. The analysis shows influenza virus titer and influenza virus RNA copy number in different time points post infection in cell line/mouse model, and weight loss post influenza virus infection in mouse model. The aim is to show the successful establishment of the infection model in cell line/mouse and compares the virus virulence in mouse model.
+"nde_dmid_pynb.ipynb" query structure data from niaid data ecosystem flu enviroment, and perform data analysis on data from FLU-LHV project. The analysis shows influenza virus titer and influenza virus RNA copy number in different time points post infection in cell line/mouse model, and weight loss post influenza virus infection in mouse model. The aim is to show the successful establishment of the infection model in cell line/mouse and compares the virus virulence in mouse model.
 
-"DMID-LHV-R.ipynb" query structure data and download object data from niaid data ecosystem flu enviroment, and perform data analysis on data from FLU-LHV project. The notebook analyzed RNA microarray datasets using limma package to compare gene expression for different virus infection model and plot heatmap to show the activation/suppression of type I inferon signal pathway upon virus infection. In addition, the notebook compared type I inferon signal pathway genes at protein level by G test and T test using processed protein expression data from Mass Spec datasets upon virus infection.
+"nde_dmid_rnb.ipynb" query structure data and download object data from niaid data ecosystem flu enviroment, and perform data analysis on data from FLU-LHV project. The notebook analyzed RNA microarray datasets using limma package to compare gene expression for different virus infection model and plot heatmap to show the activation/suppression of type I inferon signal pathway upon virus infection. In addition, the notebook compared type I inferon signal pathway genes at protein level by G test and T test using processed protein expression data from Mass Spec datasets upon virus infection.
