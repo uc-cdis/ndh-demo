@@ -1,4 +1,4 @@
-Steps to run mounted Notebook in NIAID Data ecosystem.
+Steps to run mounted notebook in NIAID Data Ecosystem.
 
 1. Login in https://niaiddata.org/ using you user id and password.
 
