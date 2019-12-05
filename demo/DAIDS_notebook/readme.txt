@@ -15,9 +15,9 @@ Steps to run mounted Notebook in NIAID Data ecosystem.
 
 Jupyter Notebook-DAIDS(Lab Edition) overview:
 
-Under daids-notebook directory, there are "CHARLIE_demo.ipynb" python notebook and its dependent library "ndh_analysis_functions.py"
+Under daids-notebook directory, there are "nde_aids_pynb.ipynb" python notebook and its dependent library "ndh_aids_function.py"
 
-"CHARLIE_demo.ipynb" query structure data from niaid data ecosystem aids enviroment, and perform data analysis on data from CHARLIE project.
+"nde_aids_pynb.ipynb" query structure data from niaid data ecosystem aids enviroment, and perform data analysis on data from CHARLIE project.
 
 The analysis is consist of three parts:
 1. Compare the CD4 positive cells and the viral load between the last HIV seronegative timepoint and first seronegative timepoint. Perform box plot and calculate the p value.
