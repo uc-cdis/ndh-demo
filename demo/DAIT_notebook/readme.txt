@@ -14,7 +14,7 @@ Steps to run mounted notebook in NIAID Data Ecosystem.
 
 Jupyter Notebook-DAIT(Lab Edition) overview:
 
-Under DAIT-notebook folder, there are "nde_dait_pynb.ipynb" python notebook and its dependent library "nde_dait_function.py", and "nde_dait_rnb.ipynb" R notebook and its dependent library "nde_dait_function.R".
+Under DAIT-notebook folder, there are "nde_dait_pynb.ipynb" python notebook and its dependent library "nde_dait_function.py", and "nde_dait_rnb.ipynb" R notebook and its dependent library "nde_dait_function.r".
 
 "nde_dait_pynb.ipynb" query structure data from niaid data ecosystem aids enviroment and perform data analysis on data from HIV-CHARLIE and DAIT-immune_controls project. The analysis shows the total cholesterol and high density lipid cholesteroal level across age in female and male groups or in different races. The analysis shows the advantage of performing analysis across projects. Combining data from different projects enriched datasets so that the measured variable is normally distributed to represent the attributes from population.
 
