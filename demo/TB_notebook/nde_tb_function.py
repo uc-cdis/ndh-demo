@@ -124,14 +124,6 @@ def extract_ariba_predict(dir):
     if os.path.isdir("/home/jovyan/pd/nb_output/tb/ariba/output/.ipynb_checkpoints"):
         os.rmdir("/home/jovyan/pd/nb_output/tb/ariba/output/.ipynb_checkpoints")
     subfolders = [f.path for f in os.scandir(dir) if f.is_dir()] 
-    cmd = "ariba summary /home/jovyan/pd/nb_output/tb/ariba/out.summary"
-    # append file end with report.tsv
-    for p in subfolders:
-        for file in os.listdir(p):
-            if "debug" not in file and file.endswith("report.tsv"):
-                cmd += " %s/%s"%(p,file)
-    process = subprocess.Popen(cmd, shell=True)
-    time.sleep(30)
     for p in subfolders:
         subject = p.split("/")[8]
         subject = subject.split(".")[0]
@@ -143,7 +135,19 @@ def extract_ariba_predict(dir):
             dst = p + "/" +subject + ".report.tsv"
             os.rename(file,dst)
             file = p + "/" +subject + ".report.tsv" 
+    cmd = "ariba summary /home/jovyan/pd/nb_output/tb/ariba/out.summary"
+    # append file end with report.tsv
+    for p in subfolders:
+        for file in os.listdir(p):
+            if "debug" not in file and file.endswith("report.tsv"):
+                cmd += " %s/%s"%(p,file)
+    process = subprocess.Popen(cmd, shell=True)
+    time.sleep(60)
+    for p in subfolders:
         # extract prediction result from each report.tsv and out.summary.csv
+        subject = p.split("/")[8]
+        subject = subject.split(".")[0]
+        file = p + "/" +subject + ".report.tsv" 
         pred = get_prediction_singleSRA(file,"/home/jovyan/pd/nb_output/tb/ariba/out.summary.csv")
         md5sum = md5(file)
         st = os.stat(file)
