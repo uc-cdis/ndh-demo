@@ -1,4 +1,4 @@
-FROM ubuntu:16.04
+FROM ubuntu:xenial-20201014
 
 LABEL maintainer Francisco Ortuno <fortuno@uchicago.edu>
 
